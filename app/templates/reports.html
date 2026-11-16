@@ -1,0 +1,278 @@
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <title>Financial Reports | Personal Finance Manager</title>
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='css/style.css') }}">
+
+</head>
+
+<body>
+
+<header>
+
+    <h1>Financial Reports</h1>
+
+    <nav>
+        <a href="{{ url_for('main.dashboard') }}">Dashboard</a>
+        <a href="{{ url_for('main.transactions') }}">Transactions</a>
+        <a href="{{ url_for('main.add_transaction') }}">Add Transaction</a>
+        <a href="{{ url_for('main.categories') }}">Categories</a>
+        <a href="{{ url_for('main.budgets') }}">Budgets</a>
+        <a href="{{ url_for('main.savings_goals') }}">Savings Goals</a>
+        <a href="{{ url_for('main.reports') }}">Reports</a>
+        <a href="{{ url_for('main.export_transactions') }}">
+    Export Transactions
+</a>
+
+<a href="{{ url_for('main.download_personal_backup') }}">
+    Download Backup
+</a>
+<a href="{{ url_for(
+    'main.export_transactions',
+    start_date=start_date,
+    end_date=end_date
+) }}">
+    Export This Date Range
+</a>
+    </nav>
+
+</header>
+
+<main>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+
+        {% if messages %}
+
+            {% for category, message in messages %}
+
+                <div class="{{ category }}">
+                    {{ message }}
+                </div>
+
+            {% endfor %}
+
+        {% endif %}
+
+    {% endwith %}
+
+
+    <section>
+
+        <h2>Select Report Period</h2>
+
+        <form method="GET"
+              action="{{ url_for('main.reports') }}">
+
+            <label for="start_date">Start Date</label>
+
+            <input
+                type="date"
+                id="start_date"
+                name="start_date"
+                value="{{ start_date }}"
+                required
+            >
+
+            <label for="end_date">End Date</label>
+
+            <input
+                type="date"
+                id="end_date"
+                name="end_date"
+                value="{{ end_date }}"
+                required
+            >
+
+            <button type="submit">
+                Generate Report
+            </button>
+
+        </form>
+
+    </section>
+
+
+    <section>
+
+        <h2>Financial Summary</h2>
+
+        <div class="report-grid">
+
+            <div class="report-card">
+                <h3>Total Income</h3>
+
+                <p class="report-income">
+                    KES {{ "{:,.2f}".format(report.total_income) }}
+                </p>
+            </div>
+
+
+            <div class="report-card">
+                <h3>Total Expenses</h3>
+
+                <p class="report-expense">
+                    KES {{ "{:,.2f}".format(report.total_expenses) }}
+                </p>
+            </div>
+
+
+            <div class="report-card">
+                <h3>Net Balance</h3>
+
+                <p class="{% if report.net_balance >= 0 %}
+                    report-income
+                {% else %}
+                    report-expense
+                {% endif %}">
+
+                    KES {{ "{:,.2f}".format(report.net_balance) }}
+
+                </p>
+            </div>
+
+
+            <div class="report-card">
+                <h3>Transactions</h3>
+
+                <p>
+                    {{ report.transaction_count }}
+                </p>
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <section>
+
+        <h2>Expense Breakdown by Category</h2>
+
+        {% if report.category_breakdown %}
+
+            {% for item in report.category_breakdown %}
+
+                <div class="category-report">
+
+                    <div class="category-report-heading">
+
+                        <strong>{{ item.name }}</strong>
+
+                        <span>
+                            KES {{ "{:,.2f}".format(item.amount) }}
+                        </span>
+
+                    </div>
+
+                    <div class="report-progress">
+
+                        <progress
+                            class="report-progress-fill"
+                            max="100"
+                            value="{{ item.percentage }}"
+                            aria-label="{{ item.name }}: {{ '%.1f'|format(item.percentage) }}% of expenses">
+                        </progress>
+
+                    </div>
+
+                    <small>
+                        {{ "%.1f"|format(item.percentage) }}% of expenses
+                    </small>
+
+                </div>
+
+            {% endfor %}
+
+        {% else %}
+
+            <p>No expenses recorded during this period.</p>
+
+        {% endif %}
+
+    </section>
+
+
+    <section>
+
+        <h2>Monthly Income vs Expenses</h2>
+
+        {% if report.monthly_data %}
+
+            {% for item in report.monthly_data %}
+
+                <div class="monthly-report">
+
+                    <h3>{{ item.month }}</h3>
+
+                    <p>
+                        Income:
+                        KES {{ "{:,.2f}".format(item.income) }}
+                    </p>
+
+                    <div class="report-progress income-bar">
+                        <progress
+                            class="report-progress-fill"
+                            max="100"
+                            value="{{ item.income_width }}"
+                            aria-label="Income: {{ item.income_width }}%">
+                        </progress>
+                    </div>
+
+
+                    <p>
+                        Expenses:
+                        KES {{ "{:,.2f}".format(item.expenses) }}
+                    </p>
+
+                    <div class="report-progress expense-bar">
+                        <progress
+                            class="report-progress-fill"
+                            max="100"
+                            value="{{ item.expense_width }}"
+                            aria-label="Expenses: {{ item.expense_width }}%">
+                        </progress>
+                    </div>
+
+                </div>
+
+            {% endfor %}
+
+        {% else %}
+
+            <p>No transactions recorded during this period.</p>
+
+        {% endif %}
+
+    </section>
+
+
+    <section>
+
+        <h2>Report Information</h2>
+
+        <p>
+            Report period: {{ start_date }} to {{ end_date }}
+        </p>
+
+        <p>
+            All figures are calculated from your recorded transactions.
+        </p>
+
+    </section>
+
+</main>
+
+</body>
+
+</html>

@@ -1,0 +1,177 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Budgets | Personal Finance Manager</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+    <header>
+        <h1>Monthly Budgets</h1>
+
+        <nav>
+            <a href="{{ url_for('main.dashboard') }}">Dashboard</a>
+            <a href="{{ url_for('main.add_transaction') }}">Add Transaction</a>
+            <a href="{{ url_for('main.categories') }}">Categories</a>
+            <a href="{{ url_for('main.budgets') }}">Budgets</a>
+            <a href="{{ url_for('main.savings_goals') }}">Savings Goals</a>
+            <a href="{{ url_for('main.reports') }}">Reports</a>
+            <a href="{{ url_for('main.export_transactions') }}">
+    Export Transactions
+</a>
+
+<a href="{{ url_for('main.download_personal_backup') }}">
+    Download Backup
+</a>
+        </nav>
+    </header>
+
+    <main>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <section>
+            <h2>Create a Budget</h2>
+
+            <form method="POST" action="{{ url_for('main.budgets') }}">
+
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <label for="amount">Budget Amount (KES)</label>
+                <input
+                    type="number"
+                    id="amount"
+                    name="amount"
+                    min="0.01"
+                    step="0.01"
+                    required
+                >
+
+                <label for="month">Month</label>
+                <select id="month" name="month" required>
+                    {% for month_number in range(1, 13) %}
+                        <option
+                            value="{{ month_number }}"
+                            {% if month_number == current_month %}selected{% endif %}
+                        >
+                            {{ [
+                                '', 'January', 'February', 'March',
+                                'April', 'May', 'June', 'July',
+                                'August', 'September', 'October',
+                                'November', 'December'
+                            ][month_number] }}
+                        </option>
+                    {% endfor %}
+                </select>
+
+                <label for="year">Year</label>
+                <input
+                    type="number"
+                    id="year"
+                    name="year"
+                    min="2000"
+                    max="9998"
+                    value="{{ current_year }}"
+                    required
+                >
+
+                <label for="category_id">Expense Category</label>
+                <select id="category_id" name="category_id">
+                    <option value="">Overall Budget</option>
+
+                    {% for category in categories %}
+                        <option value="{{ category.id }}">
+                            {{ category.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+
+                <button type="submit">Create Budget</button>
+
+            </form>
+        </section>
+
+        <section>
+            <h2>Your Budgets</h2>
+
+            {% if budget_data %}
+
+                {% for item in budget_data %}
+
+                    {% set budget = item.budget %}
+                    {% set spending = item.spending %}
+
+                    <article>
+                        <h3>
+                            {% if budget.category %}
+                                {{ budget.category.name }}
+                            {% else %}
+                                Overall Budget
+                            {% endif %}
+                        </h3>
+
+                        <p>
+                            Period:
+                            {{ budget.month }}/{{ budget.year }}
+                        </p>
+
+                        <p>
+                            Budget:
+                            KES {{ "{:,.2f}".format(budget.amount) }}
+                        </p>
+
+                        <p>
+                            Spent:
+                            KES {{ "{:,.2f}".format(spending.spent) }}
+                        </p>
+
+                        <p>
+                            Remaining:
+                            KES {{ "{:,.2f}".format(spending.remaining) }}
+                        </p>
+
+                        <p>
+                            Used:
+                            {{ "%.1f"|format(spending.percentage) }}%
+                        </p>
+
+                        <progress
+                            value="{{ spending.percentage }}"
+                            max="100"
+                        ></progress>
+
+                        {% if spending.exceeded %}
+                            <p class="error">
+                                You have exceeded this budget.
+                            </p>
+                        {% else %}
+                            <p class="success">
+                                You are within this budget.
+                            </p>
+                        {% endif %}
+
+                    </article>
+
+                {% endfor %}
+
+            {% else %}
+
+                <p>You haven't created any budgets yet.</p>
+
+            {% endif %}
+
+        </section>
+
+    </main>
+
+</body>
+</html>

@@ -1,0 +1,120 @@
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Manage Categories | Personal Finance Manager</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+
+<body>
+
+    <header>
+        <h1>Manage Categories</h1>
+
+        <nav>
+            <a href="{{ url_for('main.dashboard') }}">Dashboard</a>
+            |
+            <a href="{{ url_for('main.add_transaction') }}">Add Transaction</a>
+            |
+            <a href="{{ url_for('main.reports') }}">Reports</a>
+            |
+            <a href="{{ url_for('main.export_transactions') }}">Export Transactions</a>
+            |
+            <a href="{{ url_for('main.download_personal_backup') }}">Download Backup</a>
+        </nav>
+    </header>
+
+    <hr>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <p class="{{ category }}">{{ message }}</p>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <main>
+
+        <section>
+            <h2>Create New Category</h2>
+
+            <form method="POST" action="{{ url_for('main.categories') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <div>
+                    <label for="name">Category Name</label>
+
+                    <input
+                        type="text"
+                        id="name"
+                        name="name"
+                        maxlength="80"
+                        placeholder="e.g. Salary, Food, Transport"
+                        required
+                    >
+                </div>
+
+                <br>
+
+                <div>
+                    <label for="type">Category Type</label>
+
+                    <select id="type" name="type" required>
+                        <option value="">Select category type</option>
+                        <option value="income">Income</option>
+                        <option value="expense">Expense</option>
+                    </select>
+                </div>
+
+                <br>
+
+                <button type="submit">Create Category</button>
+            </form>
+        </section>
+
+        <hr>
+
+        <section>
+            <h2>Your Categories</h2>
+
+            <h3>Income Categories</h3>
+
+            {% if income_categories %}
+                <ul>
+                    {% for category in income_categories %}
+                        <li>{{ category.name }}</li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p>No income categories created yet.</p>
+            {% endif %}
+
+            <h3>Expense Categories</h3>
+
+            {% if expense_categories %}
+                <ul>
+                    {% for category in expense_categories %}
+                        <li>{{ category.name }}</li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p>No expense categories created yet.</p>
+            {% endif %}
+
+        </section>
+
+    </main>
+
+    <hr>
+
+    <footer>
+        <a href="{{ url_for('main.dashboard') }}">Back to Dashboard</a>
+    </footer>
+
+</body>
+</html>

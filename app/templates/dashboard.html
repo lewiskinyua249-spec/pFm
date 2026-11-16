@@ -1,0 +1,178 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Dashboard | Personal Finance Manager</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+
+<body>
+
+    <header>
+        <h1>Personal Finance Manager</h1>
+
+        <p>Welcome, {{ user.username }}!</p>
+
+        <nav>
+            <a href="{{ url_for('main.dashboard') }}">Dashboard</a>
+            |
+            <a href="{{ url_for('main.add_transaction') }}">Add Transaction</a>
+            |
+            <a href="{{ url_for('main.categories') }}">Categories</a>
+            |
+            <a href="{{ url_for('main.budgets') }}">Budgets</a>
+            |
+            <a href="{{ url_for('main.savings_goals') }}">Savings Goals</a>
+            |
+            <a href="{{ url_for('main.transactions') }}">Transaction History</a>
+            |
+            <a href="{{ url_for('main.reports') }}">Reports</a>
+            |
+            <a href="{{ url_for('main.export_transactions') }}">
+    Export Transactions
+</a>
+
+<a href="{{ url_for('main.download_personal_backup') }}">
+    Download Backup
+</a>
+            <form method="POST" action="{{ url_for('auth.logout') }}" style="display: inline;">
+
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <button type="submit">Log Out</button>
+
+</form>
+        </nav>
+    </header>
+
+    <hr>
+
+    <!-- Flash messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <p class="{{ category }}">{{ message }}</p>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <main>
+
+        <section>
+            <h2>Financial Overview</h2>
+
+            <div>
+                <h3>Total Income</h3>
+                <p>
+                    KES {{ "{:,.2f}".format(summary.income) }}
+                </p>
+            </div>
+
+            <div>
+                <h3>Total Expenses</h3>
+                <p>
+                    KES {{ "{:,.2f}".format(summary.expenses) }}
+                </p>
+            </div>
+
+            <div>
+                <h3>Available Balance</h3>
+                <p>
+                    KES {{ "{:,.2f}".format(summary.balance) }}
+                </p>
+            </div>
+
+        </section>
+
+        <hr>
+
+        <section>
+            <h2>Quick Actions</h2>
+
+            <p>
+                <a href="{{ url_for('main.add_transaction') }}">
+                    Add Transaction
+                </a>
+            </p>
+
+            <p>
+                <a href="{{ url_for('main.categories') }}">
+                    Manage Categories
+                </a>
+            </p>
+        </section>
+
+        <hr>
+
+        <section>
+
+            <h2>Recent Transactions</h2>
+
+            {% if transactions %}
+
+                <table border="1" cellpadding="8">
+
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Description</th>
+                            <th>Category</th>
+                            <th>Type</th>
+                            <th>Amount</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+
+                        {% for transaction in transactions %}
+
+                            <tr>
+
+                                <td>
+                                    {{ transaction.date.strftime("%d %b %Y") }}
+                                </td>
+
+                                <td>
+                                    {{ transaction.description or "No description" }}
+                                </td>
+
+                                <td>
+                                    {{ transaction.category.name if transaction.category else "Uncategorized" }}
+                                </td>
+
+                                <td>
+                                    {{ transaction.type|capitalize }}
+                                </td>
+
+                                <td>
+                                    KES {{ "{:,.2f}".format(transaction.amount) }}
+                                </td>
+
+                            </tr>
+
+                        {% endfor %}
+
+                    </tbody>
+
+                </table>
+
+            {% else %}
+
+                <p>No transactions recorded yet.</p>
+
+            {% endif %}
+
+        </section>
+
+    </main>
+
+    <footer>
+        <hr>
+        <p>Personal Finance Manager</p>
+    </footer>
+
+</body>
+</html>
