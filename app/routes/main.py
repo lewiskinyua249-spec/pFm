@@ -36,13 +36,19 @@ from app.services.transaction_service import (
 
 from app.services.category_service import (
     create_category,
-    get_user_categories
+    get_user_categories,
+    get_category_by_id,
+    update_category,
+    delete_category
 )
 
 from app.services.budget_service import (
     create_budget,
     get_user_budgets,
-    calculate_budget_spending
+    calculate_budget_spending,
+    get_budget_by_id,
+    update_budget,
+    delete_budget
 )
 
 from app.services.savings_goal_service import (
@@ -63,18 +69,51 @@ main = Blueprint("main", __name__)
 @login_required
 def dashboard():
 
-    summary = calculate_balance(current_user.id)
+    today = date.today()
+    default_start = today.replace(day=1)
+    start_date_value = request.args.get(
+        "start_date",
+        default_start.isoformat()
+    )
+    end_date_value = request.args.get(
+        "end_date",
+        today.isoformat()
+    )
+
+    try:
+        start_date = date.fromisoformat(start_date_value)
+        end_date = date.fromisoformat(end_date_value)
+
+        if start_date > end_date:
+            raise ValueError("Start date cannot be after end date.")
+
+        if end_date > today:
+            raise ValueError("End date cannot be in the future.")
+
+    except ValueError as error:
+        flash(str(error), "error")
+        return redirect(url_for("main.dashboard"))
+
+    summary = calculate_balance(
+        current_user.id,
+        start_date=start_date,
+        end_date=end_date
+    )
 
     transactions = get_user_transactions(
         current_user.id,
-        limit=10
+        limit=10,
+        start_date=start_date,
+        end_date=end_date
     )
 
     return render_template(
         "dashboard.html",
         user=current_user,
         summary=summary,
-        transactions=transactions
+        transactions=transactions,
+        start_date=start_date.isoformat(),
+        end_date=end_date.isoformat()
     )
 
 
@@ -180,16 +219,17 @@ def add_transaction():
 @login_required
 def categories():
 
+    form_data = {
+        "name": request.form.get("name", "").strip(),
+        "type": request.form.get("type", "").strip()
+    }
+
     if request.method == "POST":
-
-        name = request.form.get("name", "").strip()
-        category_type = request.form.get("type", "").strip()
-
         try:
             create_category(
                 user_id=current_user.id,
-                name=name,
-                category_type=category_type
+                name=form_data["name"],
+                category_type=form_data["type"]
             )
 
             flash("Category created successfully.", "success")
@@ -217,8 +257,71 @@ def categories():
     return render_template(
         "categories.html",
         income_categories=income_categories,
-        expense_categories=expense_categories
+        expense_categories=expense_categories,
+        form_data=form_data
     )
+
+
+@main.route(
+    "/categories/<int:category_id>/edit",
+    methods=["GET", "POST"]
+)
+@login_required
+def edit_category(category_id):
+
+    category = get_category_by_id(category_id, current_user.id)
+
+    if not category:
+        flash("Category not found.", "error")
+        return redirect(url_for("main.categories"))
+
+    form_data = {
+        "name": request.form.get("name", category.name).strip(),
+        "type": request.form.get("type", category.type).strip()
+    }
+
+    if request.method == "POST":
+        try:
+            update_category(
+                category_id=category.id,
+                user_id=current_user.id,
+                name=form_data["name"],
+                category_type=form_data["type"]
+            )
+            flash("Category updated successfully.", "success")
+            return redirect(url_for("main.categories"))
+
+        except ValueError as error:
+            flash(str(error), "error")
+
+        except Exception:
+            flash("An unexpected error occurred.", "error")
+
+    return render_template(
+        "edit_category.html",
+        category=category,
+        form_data=form_data
+    )
+
+
+@main.route(
+    "/categories/<int:category_id>/delete",
+    methods=["POST"]
+)
+@login_required
+def remove_category(category_id):
+
+    try:
+        delete_category(category_id, current_user.id)
+        flash("Category deleted successfully.", "success")
+
+    except ValueError as error:
+        flash(str(error), "error")
+
+    except Exception:
+        flash("An unexpected error occurred.", "error")
+
+    return redirect(url_for("main.categories"))
 
 
 @main.route("/budgets", methods=["GET", "POST"])
@@ -226,30 +329,21 @@ def categories():
 def budgets():
 
     today = date.today()
+    form_data = {
+        "amount": request.form.get("amount", "").strip(),
+        "month": request.form.get("month", str(today.month)).strip(),
+        "year": request.form.get("year", str(today.year)).strip(),
+        "category_id": request.form.get("category_id", "").strip()
+    }
 
     if request.method == "POST":
-
-        amount = request.form.get("amount", "").strip()
-        month = request.form.get("month", "").strip()
-        year = request.form.get("year", "").strip()
-        category_id = request.form.get("category_id", "").strip()
-
-        if category_id:
-            try:
-                category_id = int(category_id)
-            except ValueError:
-                flash("Invalid category selected.", "error")
-                return redirect(url_for("main.budgets"))
-        else:
-            category_id = None
-
         try:
             create_budget(
                 user_id=current_user.id,
-                amount=amount,
-                month=month,
-                year=year,
-                category_id=category_id
+                amount=form_data["amount"],
+                month=form_data["month"],
+                year=form_data["year"],
+                category_id=form_data["category_id"]
             )
 
             flash("Budget created successfully.", "success")
@@ -285,8 +379,86 @@ def budgets():
         budget_data=budget_data,
         categories=expense_categories,
         current_month=today.month,
-        current_year=today.year
+        current_year=today.year,
+        form_data=form_data
     )
+
+
+@main.route(
+    "/budgets/<int:budget_id>/edit",
+    methods=["GET", "POST"]
+)
+@login_required
+def edit_budget(budget_id):
+
+    budget = get_budget_by_id(budget_id, current_user.id)
+
+    if not budget:
+        flash("Budget not found.", "error")
+        return redirect(url_for("main.budgets"))
+
+    form_data = {
+        "amount": request.form.get("amount", str(budget.amount)).strip(),
+        "month": request.form.get("month", str(budget.month)).strip(),
+        "year": request.form.get("year", str(budget.year)).strip(),
+        "category_id": request.form.get(
+            "category_id",
+            str(budget.category_id or "")
+        ).strip()
+    }
+
+    if request.method == "POST":
+        try:
+            update_budget(
+                budget_id=budget.id,
+                user_id=current_user.id,
+                amount=form_data["amount"],
+                month=form_data["month"],
+                year=form_data["year"],
+                category_id=form_data["category_id"]
+            )
+            flash("Budget updated successfully.", "success")
+            return redirect(url_for("main.budgets"))
+
+        except ValueError as error:
+            flash(str(error), "error")
+
+        except Exception:
+            flash("An unexpected error occurred.", "error")
+
+    expense_categories = [
+        category for category in get_user_categories(current_user.id)
+        if category.type == "expense"
+    ]
+
+    return render_template(
+        "edit_budget.html",
+        budget=budget,
+        categories=expense_categories,
+        current_month=date.today().month,
+        current_year=date.today().year,
+        form_data=form_data
+    )
+
+
+@main.route(
+    "/budgets/<int:budget_id>/delete",
+    methods=["POST"]
+)
+@login_required
+def remove_budget(budget_id):
+
+    try:
+        delete_budget(budget_id, current_user.id)
+        flash("Budget deleted successfully.", "success")
+
+    except ValueError as error:
+        flash(str(error), "error")
+
+    except Exception:
+        flash("An unexpected error occurred.", "error")
+
+    return redirect(url_for("main.budgets"))
 
 
 @main.route("/savings-goals", methods=["GET", "POST"])

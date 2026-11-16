@@ -1,126 +1,68 @@
+{% extends "base.html" %}
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Edit Transaction | Personal Finance Manager</title>
-    <link rel="stylesheet"
-          href="{{ url_for('static', filename='css/style.css') }}">
-</head>
-<body>
+{% block title %}Edit transaction{% endblock %}
+{% block page_title %}Edit transaction{% endblock %}
+{% block page_description %}
+    <p class="page-description">Update the details for this entry.</p>
+{% endblock %}
 
-<header>
-    <h1>Edit Transaction</h1>
+{% block content %}
+    <section class="form-panel">
+        <div class="section-heading">
+            <div>
+                <p class="eyebrow">Transaction details</p>
+                <h2>Make an update</h2>
+            </div>
+        </div>
 
-    <nav>
-        <a href="{{ url_for('main.dashboard') }}">Dashboard</a>
-        <a href="{{ url_for('main.transactions') }}">Transaction History</a>
-        <a href="{{ url_for('main.add_transaction') }}">Add Transaction</a>
-        <a href="{{ url_for('main.reports') }}">Reports</a>
-    </nav>
-</header>
+        <form class="form-grid" method="POST"
+              action="{{ url_for('main.edit_transaction', transaction_id=transaction.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
-<main>
+            <div class="field">
+                <label for="amount">Amount (KES)</label>
+                <input type="number" id="amount" name="amount" min="0.01" max="9999999999.99" step="0.01" value="{{ transaction.amount }}" required>
+            </div>
 
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            {% for category, message in messages %}
-                <div class="{{ category }}">{{ message }}</div>
-            {% endfor %}
-        {% endif %}
-    {% endwith %}
+            <div class="field">
+                <label for="type">Transaction type</label>
+                <select id="type" name="type" required>
+                    <option value="income" {% if transaction.type == "income" %}selected{% endif %}>Income</option>
+                    <option value="expense" {% if transaction.type == "expense" %}selected{% endif %}>Expense</option>
+                </select>
+            </div>
 
-    <section>
+            <div class="field">
+                <label for="category_id">Category</label>
+                <select id="category_id" name="category_id">
+                    <option value="">No category</option>
+                    {% for category in categories %}
+                        <option value="{{ category.id }}" data-type="{{ category.type }}"
+                                {% if transaction.category_id == category.id %}selected{% endif %}>
+                            {{ category.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
 
-        <h2>Update Transaction Details</h2>
+            <div class="field">
+                <label for="date">Transaction date</label>
+                <input type="date" id="date" name="date" value="{{ transaction.date.isoformat() }}" required>
+            </div>
 
-        <form method="POST"
-              action="{{ url_for(
-                  'main.edit_transaction',
-                  transaction_id=transaction.id
-              ) }}">
+            <div class="field field-wide">
+                <label for="description">Description <span class="optional-label">Optional</span></label>
+                <input type="text" id="description" name="description" maxlength="255" value="{{ transaction.description or '' }}">
+            </div>
 
-            <input type="hidden"
-                   name="csrf_token"
-                   value="{{ csrf_token() }}">
-
-            <label for="amount">Amount (KES)</label>
-            <input
-                type="number"
-                id="amount"
-                name="amount"
-                min="0.01"
-                max="9999999999.99"
-                step="0.01"
-                value="{{ transaction.amount }}"
-                required
-            >
-
-            <label for="type">Transaction Type</label>
-            <select id="type" name="type" required>
-                <option value="income"
-                    {% if transaction.type == "income" %}selected{% endif %}>
-                    Income
-                </option>
-
-                <option value="expense"
-                    {% if transaction.type == "expense" %}selected{% endif %}>
-                    Expense
-                </option>
-            </select>
-
-            <label for="category_id">Category</label>
-            <select id="category_id" name="category_id">
-
-                <option value="">No Category</option>
-
-                {% for category in categories %}
-                    <option
-                        value="{{ category.id }}"
-                        data-type="{{ category.type }}"
-                        {% if transaction.category_id == category.id %}selected{% endif %}
-                    >
-                        {{ category.name }}
-                    </option>
-                {% endfor %}
-
-            </select>
-
-            <label for="description">Description</label>
-            <input
-                type="text"
-                id="description"
-                name="description"
-                maxlength="255"
-                value="{{ transaction.description or '' }}"
-            >
-
-            <label for="date">Transaction Date</label>
-            <input
-                type="date"
-                id="date"
-                name="date"
-                value="{{ transaction.date.isoformat() }}"
-                required
-            >
-
-            <button type="submit">Save Changes</button>
-
-            <a href="{{ url_for('main.transactions') }}">
-                Cancel
-            </a>
-
+            <div class="form-actions field-wide">
+                <button type="submit">Save changes</button>
+                <a class="button button-secondary" href="{{ url_for('main.transactions') }}">Cancel</a>
+            </div>
         </form>
-
     </section>
+{% endblock %}
 
-</main>
-
-<script src="{{ url_for(
-    'static',
-    filename='js/transaction.js'
-) }}"></script>
-
-</body>
-</html>
+{% block scripts %}
+    <script src="{{ url_for('static', filename='js/transaction.js') }}"></script>
+{% endblock %}

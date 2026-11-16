@@ -1,120 +1,100 @@
+{% extends "base.html" %}
 
-<!DOCTYPE html>
-<html lang="en">
+{% block title %}Categories{% endblock %}
+{% block page_title %}Categories{% endblock %}
+{% block page_description %}
+    <p class="page-description">Organize transactions into groups that make sense to you.</p>
+{% endblock %}
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+{% block content %}
+    <section class="form-panel">
+        <div class="section-heading">
+            <div>
+                <p class="eyebrow">Make it yours</p>
+                <h2>Create a category</h2>
+            </div>
+        </div>
 
-    <title>Manage Categories | Personal Finance Manager</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-</head>
+        <form class="form-grid" method="POST" action="{{ url_for('main.categories') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
-<body>
+            <div class="field">
+                <label for="name">Category name</label>
+                <input type="text" id="name" name="name" maxlength="80"
+                       placeholder="e.g. Salary, Food, Transport"
+                       value="{{ form_data.name }}" required>
+            </div>
 
-    <header>
-        <h1>Manage Categories</h1>
+            <div class="field">
+                <label for="type">Category type</label>
+                <select id="type" name="type" required>
+                    <option value="">Choose a type</option>
+                    <option value="income" {% if form_data.type == "income" %}selected{% endif %}>Income</option>
+                    <option value="expense" {% if form_data.type == "expense" %}selected{% endif %}>Expense</option>
+                </select>
+            </div>
 
-        <nav>
-            <a href="{{ url_for('main.dashboard') }}">Dashboard</a>
-            |
-            <a href="{{ url_for('main.add_transaction') }}">Add Transaction</a>
-            |
-            <a href="{{ url_for('main.reports') }}">Reports</a>
-            |
-            <a href="{{ url_for('main.export_transactions') }}">Export Transactions</a>
-            |
-            <a href="{{ url_for('main.download_personal_backup') }}">Download Backup</a>
-        </nav>
-    </header>
+            <div class="form-actions field-wide">
+                <button type="submit">Create category</button>
+            </div>
+        </form>
+    </section>
 
-    <hr>
-
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            {% for category, message in messages %}
-                <p class="{{ category }}">{{ message }}</p>
-            {% endfor %}
-        {% endif %}
-    {% endwith %}
-
-    <main>
-
+    <div class="category-columns">
         <section>
-            <h2>Create New Category</h2>
-
-            <form method="POST" action="{{ url_for('main.categories') }}">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-
+            <div class="section-heading">
                 <div>
-                    <label for="name">Category Name</label>
-
-                    <input
-                        type="text"
-                        id="name"
-                        name="name"
-                        maxlength="80"
-                        placeholder="e.g. Salary, Food, Transport"
-                        required
-                    >
+                    <p class="eyebrow">Money in</p>
+                    <h2>Income Categories</h2>
                 </div>
-
-                <br>
-
-                <div>
-                    <label for="type">Category Type</label>
-
-                    <select id="type" name="type" required>
-                        <option value="">Select category type</option>
-                        <option value="income">Income</option>
-                        <option value="expense">Expense</option>
-                    </select>
-                </div>
-
-                <br>
-
-                <button type="submit">Create Category</button>
-            </form>
-        </section>
-
-        <hr>
-
-        <section>
-            <h2>Your Categories</h2>
-
-            <h3>Income Categories</h3>
-
+                <span class="count-pill">{{ income_categories|length }}</span>
+            </div>
             {% if income_categories %}
-                <ul>
+                <ul class="category-list">
                     {% for category in income_categories %}
-                        <li>{{ category.name }}</li>
+                        <li>
+                            <span class="category-color income-color" aria-hidden="true"></span>
+                            <span class="category-name">{{ category.name }}</span>
+                            <a href="{{ url_for('main.edit_category', category_id=category.id) }}">Edit</a>
+                            <form method="POST" action="{{ url_for('main.remove_category', category_id=category.id) }}"
+                                  onsubmit="return confirm('Delete this category?');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button class="button-danger" type="submit">Delete</button>
+                            </form>
+                        </li>
                     {% endfor %}
                 </ul>
             {% else %}
-                <p>No income categories created yet.</p>
+                <div class="empty-state compact-empty"><p>No income categories yet.</p></div>
             {% endif %}
-
-            <h3>Expense Categories</h3>
-
-            {% if expense_categories %}
-                <ul>
-                    {% for category in expense_categories %}
-                        <li>{{ category.name }}</li>
-                    {% endfor %}
-                </ul>
-            {% else %}
-                <p>No expense categories created yet.</p>
-            {% endif %}
-
         </section>
 
-    </main>
-
-    <hr>
-
-    <footer>
-        <a href="{{ url_for('main.dashboard') }}">Back to Dashboard</a>
-    </footer>
-
-</body>
-</html>
+        <section>
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">Money out</p>
+                    <h2>Expense Categories</h2>
+                </div>
+                <span class="count-pill">{{ expense_categories|length }}</span>
+            </div>
+            {% if expense_categories %}
+                <ul class="category-list">
+                    {% for category in expense_categories %}
+                        <li>
+                            <span class="category-color expense-color" aria-hidden="true"></span>
+                            <span class="category-name">{{ category.name }}</span>
+                            <a href="{{ url_for('main.edit_category', category_id=category.id) }}">Edit</a>
+                            <form method="POST" action="{{ url_for('main.remove_category', category_id=category.id) }}"
+                                  onsubmit="return confirm('Delete this category?');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button class="button-danger" type="submit">Delete</button>
+                            </form>
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <div class="empty-state compact-empty"><p>No expense categories yet.</p></div>
+            {% endif %}
+        </section>
+    </div>
+{% endblock %}

@@ -1,178 +1,105 @@
+{% extends "base.html" %}
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+{% block title %}Overview{% endblock %}
+{% block page_title %}Good to see you, {{ user.username }}{% endblock %}
+{% block page_description %}
+    <p class="page-description">Here is your money at a glance. Choose a period to see how things are moving.</p>
+{% endblock %}
+{% block page_actions %}
+    <a class="button button-secondary" href="{{ url_for('main.transactions') }}">View transactions</a>
+{% endblock %}
 
-    <title>Dashboard | Personal Finance Manager</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-</head>
-
-<body>
-
-    <header>
-        <h1>Personal Finance Manager</h1>
-
-        <p>Welcome, {{ user.username }}!</p>
-
-        <nav>
-            <a href="{{ url_for('main.dashboard') }}">Dashboard</a>
-            |
-            <a href="{{ url_for('main.add_transaction') }}">Add Transaction</a>
-            |
-            <a href="{{ url_for('main.categories') }}">Categories</a>
-            |
-            <a href="{{ url_for('main.budgets') }}">Budgets</a>
-            |
-            <a href="{{ url_for('main.savings_goals') }}">Savings Goals</a>
-            |
-            <a href="{{ url_for('main.transactions') }}">Transaction History</a>
-            |
-            <a href="{{ url_for('main.reports') }}">Reports</a>
-            |
-            <a href="{{ url_for('main.export_transactions') }}">
-    Export Transactions
-</a>
-
-<a href="{{ url_for('main.download_personal_backup') }}">
-    Download Backup
-</a>
-            <form method="POST" action="{{ url_for('auth.logout') }}" style="display: inline;">
-
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-
-    <button type="submit">Log Out</button>
-
-</form>
-        </nav>
-    </header>
-
-    <hr>
-
-    <!-- Flash messages -->
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            {% for category, message in messages %}
-                <p class="{{ category }}">{{ message }}</p>
-            {% endfor %}
-        {% endif %}
-    {% endwith %}
-
-    <main>
-
-        <section>
-            <h2>Financial Overview</h2>
-
+{% block content %}
+    <section class="overview-section">
+        <div class="section-heading">
             <div>
-                <h3>Total Income</h3>
-                <p>
-                    KES {{ "{:,.2f}".format(summary.income) }}
-                </p>
+                <p class="eyebrow">Your snapshot</p>
+                <h2>Financial overview</h2>
             </div>
+            <span class="period-caption">{{ start_date }} — {{ end_date }}</span>
+        </div>
 
+        <form class="period-form" method="GET" action="{{ url_for('main.dashboard') }}">
+            <div class="field">
+                <label for="start_date">From date</label>
+                <input type="date" id="start_date" name="start_date" value="{{ start_date }}" required>
+            </div>
+            <div class="field">
+                <label for="end_date">To date</label>
+                <input type="date" id="end_date" name="end_date" value="{{ end_date }}" required>
+            </div>
+            <button type="submit">Update overview</button>
+        </form>
+
+        <div class="balance-panel">
             <div>
-                <h3>Total Expenses</h3>
-                <p>
-                    KES {{ "{:,.2f}".format(summary.expenses) }}
-                </p>
+                <p class="balance-label">Net balance for this period</p>
+                <p class="balance-value">KES {{ "{:,.2f}".format(summary.balance) }}</p>
             </div>
+            <span class="balance-mark" aria-hidden="true">+</span>
+        </div>
 
+        <div class="metric-grid">
+            <article class="metric-card income-card">
+                <p class="metric-label"><span class="metric-dot" aria-hidden="true"></span>Income</p>
+                <p class="metric-value">KES {{ "{:,.2f}".format(summary.income) }}</p>
+                <p class="metric-note">Money in during this period</p>
+            </article>
+            <article class="metric-card expense-card">
+                <p class="metric-label"><span class="metric-dot" aria-hidden="true"></span>Expenses</p>
+                <p class="metric-value">KES {{ "{:,.2f}".format(summary.expenses) }}</p>
+                <p class="metric-note">Money out during this period</p>
+            </article>
+        </div>
+    </section>
+
+    <section>
+        <div class="section-heading">
             <div>
-                <h3>Available Balance</h3>
-                <p>
-                    KES {{ "{:,.2f}".format(summary.balance) }}
-                </p>
+                <p class="eyebrow">Latest activity</p>
+                <h2>Recent transactions</h2>
             </div>
+            <a class="text-link" href="{{ url_for('main.transactions') }}">See all</a>
+        </div>
 
-        </section>
-
-        <hr>
-
-        <section>
-            <h2>Quick Actions</h2>
-
-            <p>
-                <a href="{{ url_for('main.add_transaction') }}">
-                    Add Transaction
-                </a>
-            </p>
-
-            <p>
-                <a href="{{ url_for('main.categories') }}">
-                    Manage Categories
-                </a>
-            </p>
-        </section>
-
-        <hr>
-
-        <section>
-
-            <h2>Recent Transactions</h2>
-
-            {% if transactions %}
-
-                <table border="1" cellpadding="8">
-
+        {% if transactions %}
+            <div class="table-container">
+                <table>
                     <thead>
                         <tr>
-                            <th>Date</th>
-                            <th>Description</th>
-                            <th>Category</th>
-                            <th>Type</th>
-                            <th>Amount</th>
+                            <th scope="col">Date</th>
+                            <th scope="col">Description</th>
+                            <th scope="col">Category</th>
+                            <th scope="col">Type</th>
+                            <th scope="col">Amount</th>
                         </tr>
                     </thead>
-
                     <tbody>
-
                         {% for transaction in transactions %}
-
                             <tr>
-
+                                <td>{{ transaction.date.strftime("%d %b %Y") }}</td>
+                                <td class="transaction-description">{{ transaction.description or "No description" }}</td>
+                                <td>{{ transaction.category.name if transaction.category else "Uncategorized" }}</td>
                                 <td>
-                                    {{ transaction.date.strftime("%d %b %Y") }}
+                                    <span class="type-badge {{ transaction.type }}">
+                                        {{ transaction.type|capitalize }}
+                                    </span>
                                 </td>
-
-                                <td>
-                                    {{ transaction.description or "No description" }}
-                                </td>
-
-                                <td>
-                                    {{ transaction.category.name if transaction.category else "Uncategorized" }}
-                                </td>
-
-                                <td>
-                                    {{ transaction.type|capitalize }}
-                                </td>
-
-                                <td>
+                                <td class="amount-cell {{ transaction.type }}">
                                     KES {{ "{:,.2f}".format(transaction.amount) }}
                                 </td>
-
                             </tr>
-
                         {% endfor %}
-
                     </tbody>
-
                 </table>
-
-            {% else %}
-
-                <p>No transactions recorded yet.</p>
-
-            {% endif %}
-
-        </section>
-
-    </main>
-
-    <footer>
-        <hr>
-        <p>Personal Finance Manager</p>
-    </footer>
-
-</body>
-</html>
+            </div>
+        {% else %}
+            <div class="empty-state">
+                <span class="empty-mark" aria-hidden="true">+</span>
+                <h3>No activity in this period</h3>
+                <p>Add a transaction to start building your financial picture.</p>
+                <a class="button button-primary" href="{{ url_for('main.add_transaction') }}">Add your first transaction</a>
+            </div>
+        {% endif %}
+    </section>
+{% endblock %}

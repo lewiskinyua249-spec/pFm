@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}Edit category{% endblock %}
+{% block page_title %}Edit category{% endblock %}
+{% block page_description %}
+    <p class="page-description">Update how this group appears in your finances.</p>
+{% endblock %}
+
+{% block content %}
+    <section class="form-panel">
+        <div class="section-heading">
+            <div>
+                <p class="eyebrow">Category details</p>
+                <h2>Update {{ category.name }}</h2>
+            </div>
+        </div>
+
+        <form class="form-grid" method="POST" action="{{ url_for('main.edit_category', category_id=category.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <div class="field">
+                <label for="name">Category name</label>
+                <input type="text" id="name" name="name" maxlength="80" value="{{ form_data.name }}" required>
+            </div>
+            <div class="field">
+                <label for="type">Category type</label>
+                <select id="type" name="type" required>
+                    <option value="income" {% if form_data.type == "income" %}selected{% endif %}>Income</option>
+                    <option value="expense" {% if form_data.type == "expense" %}selected{% endif %}>Expense</option>
+                </select>
+            </div>
+            <p class="field-hint field-wide">
+                Categories already used by transactions or budgets cannot change type.
+                You can still update their name.
+            </p>
+            <div class="form-actions field-wide">
+                <button type="submit">Save changes</button>
+                <a class="button button-secondary" href="{{ url_for('main.categories') }}">Cancel</a>
+            </div>
+        </form>
+    </section>
+{% endblock %}

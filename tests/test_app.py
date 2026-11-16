@@ -16,13 +16,18 @@ from app.services.transaction_service import (
 from app.services.category_service import (
     create_category,
     get_user_categories,
-    get_category_by_id
+    get_category_by_id,
+    update_category,
+    delete_category
 )
 
 from app.services.budget_service import (
     create_budget,
     get_user_budgets,
-    calculate_budget_spending
+    calculate_budget_spending,
+    get_budget_by_id,
+    update_budget,
+    delete_budget
 )
 
 from app.services.savings_goal_service import (
@@ -33,7 +38,7 @@ from app.services.savings_goal_service import (
     delete_savings_goal
 )
 
-from datetime import date
+from datetime import date, timedelta
 
 from app.services.report_service import get_financial_report
 
@@ -164,6 +169,119 @@ def test_user_can_login(client, registered_user):
     assert b"Dashboard" in response.data
 
 
+def test_dashboard_filters_summary_by_requested_dates(
+    app,
+    client,
+    registered_user
+):
+
+    with app.app_context():
+        today = date.today()
+        yesterday = today - timedelta(days=1)
+        create_transaction(
+            user_id=registered_user["id"],
+            amount="250.00",
+            transaction_type="income",
+            transaction_date=today
+        )
+        create_transaction(
+            user_id=registered_user["id"],
+            amount="40.00",
+            transaction_type="expense",
+            transaction_date=yesterday
+        )
+
+    client.post(
+        "/login",
+        data={
+            "email": registered_user["email"],
+            "password": registered_user["password"]
+        }
+    )
+
+    response = client.get(
+        f"/?start_date={today.isoformat()}&end_date={today.isoformat()}"
+    )
+
+    assert response.status_code == 200
+    assert b"KES 250.00" in response.data
+    assert b"KES 0.00" in response.data
+    assert today.isoformat().encode() in response.data
+
+
+def test_budget_and_category_management_routes(
+    app,
+    client,
+    registered_user
+):
+
+    with app.app_context():
+        category = create_category(
+            user_id=registered_user["id"],
+            name="Dining",
+            category_type="expense"
+        )
+        budget = create_budget(
+            user_id=registered_user["id"],
+            amount="500.00",
+            month=11,
+            year=2026
+        )
+        category_id = category.id
+        budget_id = budget.id
+
+    client.post(
+        "/login",
+        data={
+            "email": registered_user["email"],
+            "password": registered_user["password"]
+        }
+    )
+
+    categories_response = client.get("/categories")
+    budgets_response = client.get("/budgets")
+
+    assert categories_response.status_code == 200
+    assert b"Edit" in categories_response.data
+    assert budgets_response.status_code == 200
+    assert b"Edit Budget" in budgets_response.data
+
+    category_response = client.post(
+        f"/categories/{category_id}/edit",
+        data={"name": "Restaurants", "type": "expense"},
+        follow_redirects=True
+    )
+    budget_response = client.post(
+        f"/budgets/{budget_id}/edit",
+        data={
+            "amount": "750.00",
+            "month": "11",
+            "year": "2026",
+            "category_id": ""
+        },
+        follow_redirects=True
+    )
+
+    assert category_response.status_code == 200
+    assert b"Restaurants" in category_response.data
+    assert budget_response.status_code == 200
+    assert b"KES 750.00" in budget_response.data
+
+    category_delete_response = client.post(
+        f"/categories/{category_id}/delete",
+        follow_redirects=True
+    )
+    budget_delete_response = client.post(
+        f"/budgets/{budget_id}/delete",
+        follow_redirects=True
+    )
+
+    assert category_delete_response.status_code == 200
+    assert b"Restaurants" not in category_delete_response.data
+    assert budget_delete_response.status_code == 200
+    assert b"You haven't created any budgets yet." in budget_delete_response.data
+
+
 def test_login_rejects_wrong_password(
     client,
     registered_user
@@ -269,6 +387,48 @@ def test_balance_is_calculated_correctly(
         assert balance["balance"] == Decimal("7500.00")
 
 
+def test_balance_can_be_calculated_for_a_date_range(
+    app,
+    registered_user
+):
+
+    with app.app_context():
+        today = date.today()
+        yesterday = today - timedelta(days=1)
+        two_days_ago = today - timedelta(days=2)
+
+        create_transaction(
+            user_id=registered_user["id"],
+            amount="1000.00",
+            transaction_type="income",
+            transaction_date=two_days_ago
+        )
+        create_transaction(
+            user_id=registered_user["id"],
+            amount="200.00",
+            transaction_type="expense",
+            transaction_date=yesterday
+        )
+        create_transaction(
+            user_id=registered_user["id"],
+            amount="50.00",
+            transaction_type="expense",
+            transaction_date=today
+        )
+
+        balance = calculate_balance(
+            registered_user["id"],
+            start_date=yesterday,
+            end_date=today
+        )
+
+        assert balance == {
+            "income": Decimal("0.00"),
+            "expenses": Decimal("250.00"),
+            "balance": Decimal("-250.00")
+        }
+
+
 def test_user_can_create_category(app, registered_user):
 
     with app.app_context():
@@ -345,6 +505,95 @@ def test_user_categories_are_isolated(
         assert len(categories) == 0
 
 
+def test_user_can_update_category(app, registered_user):
+
+    with app.app_context():
+        category = create_category(
+            user_id=registered_user["id"],
+            name="Old Name",
+            category_type="expense"
+        )
+
+        updated = update_category(
+            category.id,
+            registered_user["id"],
+            "New Name",
+            "expense"
+        )
+
+        assert updated.name == "New Name"
+        assert updated.type == "expense"
+
+
+def test_category_type_cannot_change_when_referenced(
+    app,
+    registered_user
+):
+
+    with app.app_context():
+        category = create_category(
+            user_id=registered_user["id"],
+            name="Salary",
+            category_type="income"
+        )
+        create_transaction(
+            user_id=registered_user["id"],
+            amount="1000.00",
+            transaction_type="income",
+            category_id=category.id
+        )
+
+        with pytest.raises(ValueError, match="cannot change type"):
+            update_category(
+                category.id,
+                registered_user["id"],
+                "Salary",
+                "expense"
+            )
+
+        assert category.type == "income"
+
+
+def test_category_in_use_cannot_be_deleted(app, registered_user):
+
+    with app.app_context():
+        category = create_category(
+            user_id=registered_user["id"],
+            name="Food",
+            category_type="expense"
+        )
+        create_transaction(
+            user_id=registered_user["id"],
+            amount="100.00",
+            transaction_type="expense",
+            category_id=category.id
+        )
+
+        with pytest.raises(ValueError, match="used by a transaction"):
+            delete_category(category.id, registered_user["id"])
+
+        assert get_category_by_id(
+            category.id,
+            registered_user["id"]
+        ) is not None
+
+
+def test_user_can_delete_unused_category(app, registered_user):
+
+    with app.app_context():
+        category = create_category(
+            user_id=registered_user["id"],
+            name="Unused",
+            category_type="expense"
+        )
+
+        assert delete_category(category.id, registered_user["id"]) is True
+        assert get_category_by_id(
+            category.id,
+            registered_user["id"]
+        ) is None
+
+
 def test_user_can_create_budget(app, registered_user):
 
     with app.app_context():
@@ -378,6 +627,108 @@ def test_duplicate_budget_is_rejected(app, registered_user):
                 user_id=registered_user["id"],
                 amount="6000.00",
                 month=11,
+                year=2026
+            )
+
+
+def test_user_can_update_budget(app, registered_user):
+
+    with app.app_context():
+        budget = create_budget(
+            user_id=registered_user["id"],
+            amount="5000.00",
+            month=11,
+            year=2026
+        )
+
+        updated = update_budget(
+            budget.id,
+            registered_user["id"],
+            amount="6500.00",
+            month=12,
+            year=2026
+        )
+
+        assert updated.amount == Decimal("6500.00")
+        assert updated.month == 12
+        assert updated.year == 2026
+
+
+def test_budget_update_rejects_duplicate_period(
+    app,
+    registered_user
+):
+
+    with app.app_context():
+        first = create_budget(
+            user_id=registered_user["id"],
+            amount="5000.00",
+            month=11,
+            year=2026
+        )
+        second = create_budget(
+            user_id=registered_user["id"],
+            amount="4000.00",
+            month=12,
+            year=2026
+        )
+
+        with pytest.raises(ValueError, match="already exists"):
+            update_budget(
+                second.id,
+                registered_user["id"],
+                amount="4000.00",
+                month=11,
+                year=2026
+            )
+
+        assert get_budget_by_id(
+            second.id,
+            registered_user["id"]
+        ).month == 12
+        assert get_budget_by_id(
+            first.id,
+            registered_user["id"]
+        ) is not None
+
+
+def test_user_can_delete_budget(app, registered_user):
+
+    with app.app_context():
+        budget = create_budget(
+            user_id=registered_user["id"],
+            amount="5000.00",
+            month=11,
+            year=2026
+        )
+
+        assert delete_budget(budget.id, registered_user["id"]) is True
+        assert get_budget_by_id(
+            budget.id,
+            registered_user["id"]
+        ) is None
+
+
+def test_user_cannot_update_another_users_budget(
+    app,
+    registered_user,
+    another_user
+):
+
+    with app.app_context():
+        budget = create_budget(
+            user_id=registered_user["id"],
+            amount="5000.00",
+            month=11,
+            year=2026
+        )
+
+        with pytest.raises(ValueError, match="not found"):
+            update_budget(
+                budget.id,
+                another_user["id"],
+                amount="6500.00",
+                month=12,
                 year=2026
             )
 
@@ -1864,7 +2215,8 @@ def test_create_budget_rejects_non_numeric_category_id(
         "category_id": "invalid"
     })
 
-    assert response.status_code == 302
+    assert response.status_code == 200
+    assert b"Select a valid expense category." in response.data
 
     with app.app_context():
         from app.services.budget_service import get_user_budgets

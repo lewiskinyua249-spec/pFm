@@ -1,220 +1,109 @@
+{% extends "base.html" %}
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+{% block title %}Savings goals{% endblock %}
+{% block page_title %}Savings Goals{% endblock %}
+{% block page_description %}
+    <p class="page-description">Keep the things you are saving for within reach.</p>
+{% endblock %}
 
-    <title>Savings Goals | Personal Finance Manager</title>
+{% block content %}
+    <section class="form-panel">
+        <div class="section-heading">
+            <div>
+                <p class="eyebrow">Make a little progress</p>
+                <h2>Create a Savings Goal</h2>
+            </div>
+        </div>
 
-    <link rel="stylesheet"
-          href="{{ url_for('static', filename='css/style.css') }}">
-</head>
+        <form class="form-grid" method="POST" action="{{ url_for('main.savings_goals') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
-<body>
+            <div class="field">
+                <label for="name">Goal name</label>
+                <input type="text" id="name" name="name" maxlength="100" placeholder="e.g. New laptop" required>
+            </div>
 
-<header>
-    <h1>Savings Goals</h1>
+            <div class="field">
+                <label for="target_amount">Target amount (KES)</label>
+                <input type="number" id="target_amount" name="target_amount" min="0.01"
+                       max="9999999999.99" step="0.01" placeholder="0.00" required>
+            </div>
 
-    <nav>
-        <a href="{{ url_for('main.dashboard') }}">Dashboard</a>
-        <a href="{{ url_for('main.add_transaction') }}">Add Transaction</a>
-        <a href="{{ url_for('main.categories') }}">Categories</a>
-        <a href="{{ url_for('main.budgets') }}">Budgets</a>
-        <a href="{{ url_for('main.savings_goals') }}">Savings Goals</a>
-        <a href="{{ url_for('main.reports') }}">Reports</a>
-        <a href="{{ url_for('main.export_transactions') }}">
-    Export Transactions
-</a>
+            <div class="field">
+                <label for="deadline">Target deadline <span class="optional-label">Optional</span></label>
+                <input type="date" id="deadline" name="deadline" min="{{ today.isoformat() }}">
+            </div>
 
-<a href="{{ url_for('main.download_personal_backup') }}">
-    Download Backup
-</a>
-    </nav>
-</header>
-
-<main>
-
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            {% for category, message in messages %}
-                <div class="{{ category }}">{{ message }}</div>
-            {% endfor %}
-        {% endif %}
-    {% endwith %}
-
-    <section>
-
-        <h2>Create a Savings Goal</h2>
-
-        <form method="POST"
-              action="{{ url_for('main.savings_goals') }}">
-
-            <input type="hidden"
-                   name="csrf_token"
-                   value="{{ csrf_token() }}">
-
-            <label for="name">Goal Name</label>
-
-            <input
-                type="text"
-                id="name"
-                name="name"
-                maxlength="100"
-                placeholder="Example: New Laptop"
-                required
-            >
-
-            <label for="target_amount">Target Amount (KES)</label>
-
-            <input
-                type="number"
-                id="target_amount"
-                name="target_amount"
-                min="0.01"
-                max="9999999999.99"
-                step="0.01"
-                required
-            >
-
-            <label for="deadline">Target Deadline (Optional)</label>
-
-            <input
-                type="date"
-                id="deadline"
-                name="deadline"
-                min="{{ today.isoformat() }}"
-            >
-
-            <button type="submit">Create Savings Goal</button>
-
+            <div class="form-actions field-wide">
+                <button type="submit">Create goal</button>
+            </div>
         </form>
-
     </section>
 
     <section>
-
-        <h2>Your Savings Goals</h2>
+        <div class="section-heading">
+            <div>
+                <p class="eyebrow">The bigger picture</p>
+                <h2>Your Savings Goals</h2>
+            </div>
+            <span class="result-count">{{ goals|length }} goals</span>
+        </div>
 
         {% if goals %}
-
-            {% for goal in goals %}
-
-                <article>
-
-                    <h3>{{ goal.name }}</h3>
-
-                    <p>
-                        Target:
-                        KES {{ "{:,.2f}".format(goal.target_amount) }}
-                    </p>
-
-                    <p>
-                        Saved:
-                        KES {{ "{:,.2f}".format(goal.current_amount) }}
-                    </p>
-
-                    <p>
-                        Remaining:
-                        KES {{ "{:,.2f}".format(goal.remaining_amount) }}
-                    </p>
-
-                    <p>
-                        Progress:
-                        {{ "%.1f"|format(goal.progress_percentage) }}%
-                    </p>
-
-                    <progress
-                        value="{{ goal.progress_percentage }}"
-                        max="100">
-                    </progress>
-
-                    {% if goal.deadline %}
-                        <p>
-                            Deadline: {{ goal.deadline.strftime("%d %B %Y") }}
-                        </p>
-                    {% else %}
-                        <p>No deadline set.</p>
-                    {% endif %}
-
-                    {% if goal.current_amount >= goal.target_amount %}
-
-                        <p class="success">
-                            Congratulations! You have reached your savings target.
-                        </p>
-
-                    {% endif %}
-
-                    <h4>Add Savings</h4>
-
-                    <form
-                        method="POST"
-                        action="{{ url_for(
-                            'main.add_savings_progress',
-                            goal_id=goal.id
-                        ) }}"
-                    >
-
-                        <input
-                            type="hidden"
-                            name="csrf_token"
-                            value="{{ csrf_token() }}"
-                        >
-
-                        <label for="amount-{{ goal.id }}">
-                            Amount to Add (KES)
-                        </label>
-
-                        <input
-                            type="number"
-                            id="amount-{{ goal.id }}"
-                            name="amount"
-                            min="0.01"
-                            max="9999999999.99"
-                            step="0.01"
-                            required
-                        >
-
-                        <button type="submit">
-                            Add Savings
-                        </button>
-
-                    </form>
-
-                    <form
-                        method="POST"
-                        action="{{ url_for(
-                            'main.remove_savings_goal',
-                            goal_id=goal.id
-                        ) }}"
-                        onsubmit="return confirm('Delete this savings goal?');"
-                    >
-
-                        <input
-                            type="hidden"
-                            name="csrf_token"
-                            value="{{ csrf_token() }}"
-                        >
-
-                        <button type="submit">
-                            Delete Goal
-                        </button>
-
-                    </form>
-
-                </article>
-
-            {% endfor %}
-
+            <div class="goal-grid">
+                {% for goal in goals %}
+                    <article class="goal-card">
+                        <div class="goal-card-top">
+                            <span class="goal-icon" aria-hidden="true">◎</span>
+                            {% if goal.current_amount >= goal.target_amount %}
+                                <span class="goal-complete">Reached</span>
+                            {% endif %}
+                        </div>
+                        <h3>{{ goal.name }}</h3>
+                        <div class="goal-progress-copy">
+                            <strong>KES {{ "{:,.2f}".format(goal.current_amount) }}</strong>
+                            <span>of KES {{ "{:,.2f}".format(goal.target_amount) }}</span>
+                        </div>
+                        <progress value="{{ goal.progress_percentage }}" max="100"
+                                  aria-label="{{ goal.name }}: {{ '%.1f'|format(goal.progress_percentage) }}% saved"></progress>
+                        <div class="goal-meta">
+                            <span>{{ "%.1f"|format(goal.progress_percentage) }}% saved</span>
+                            <span>KES {{ "{:,.2f}".format(goal.remaining_amount) }} to go</span>
+                        </div>
+                        {% if goal.deadline %}
+                            <p class="goal-deadline">Target date: {{ goal.deadline.strftime("%d %B %Y") }}</p>
+                        {% else %}
+                            <p class="goal-deadline">No target date set</p>
+                        {% endif %}
+                        {% if goal.current_amount >= goal.target_amount %}
+                            <p class="success">You reached this savings target. Well done!</p>
+                        {% else %}
+                            <form class="goal-add-form" method="POST"
+                                  action="{{ url_for('main.add_savings_progress', goal_id=goal.id) }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <label for="amount-{{ goal.id }}">Add savings (KES)</label>
+                                <div class="inline-input">
+                                    <input type="number" id="amount-{{ goal.id }}" name="amount"
+                                           min="0.01" max="9999999999.99" step="0.01"
+                                           placeholder="0.00" required>
+                                    <button type="submit">Add</button>
+                                </div>
+                            </form>
+                        {% endif %}
+                        <form class="goal-delete-form" method="POST"
+                              action="{{ url_for('main.remove_savings_goal', goal_id=goal.id) }}"
+                              onsubmit="return confirm('Delete this savings goal?');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button class="button-danger" type="submit">Delete goal</button>
+                        </form>
+                    </article>
+                {% endfor %}
+            </div>
         {% else %}
-
-            <p>You haven't created any savings goals yet.</p>
-
+            <div class="empty-state">
+                <h3>Nothing on the horizon yet</h3>
+                <p>You haven't created any savings goals yet.</p>
+            </div>
         {% endif %}
-
     </section>
-
-</main>
-
-</body>
-</html>
+{% endblock %}

@@ -1,179 +1,96 @@
+{% extends "base.html" %}
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Transactions | Personal Finance Manager</title>
-    <link rel="stylesheet"
-          href="{{ url_for('static', filename='css/style.css') }}">
-</head>
-<body>
+{% block title %}Transactions{% endblock %}
+{% block page_title %}Transactions{% endblock %}
+{% block page_description %}
+    <p class="page-description">A clear record of what is coming in and going out.</p>
+{% endblock %}
 
-<header>
-    <h1>Transaction History</h1>
-
-    <nav>
-        <a href="{{ url_for('main.dashboard') }}">Dashboard</a>
-        <a href="{{ url_for('main.add_transaction') }}">Add Transaction</a>
-        <a href="{{ url_for('main.categories') }}">Categories</a>
-        <a href="{{ url_for('main.budgets') }}">Budgets</a>
-        <a href="{{ url_for('main.savings_goals') }}">Savings Goals</a>
-        <a href="{{ url_for('main.transactions') }}">Transactions</a>
-        <a href="{{ url_for('main.reports') }}">Reports</a>
-        <a href="{{ url_for('main.export_transactions') }}">
-    Export Transactions
-</a>
-
-<a href="{{ url_for('main.download_personal_backup') }}">
-    Download Backup
-</a>
-    </nav>
-</header>
-
-<main>
-
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-            {% for category, message in messages %}
-                <div class="{{ category }}">{{ message }}</div>
-            {% endfor %}
-        {% endif %}
-    {% endwith %}
-
+{% block content %}
     <section>
-        <h2>Find Transactions</h2>
+        <div class="section-heading">
+            <div>
+                <p class="eyebrow">Find what you need</p>
+                <h2>Filter activity</h2>
+            </div>
+        </div>
 
-        <form method="GET"
-              action="{{ url_for('main.transactions') }}">
-
-            <label for="q">Search Description</label>
-            <input
-                type="search"
-                id="q"
-                name="q"
-                value="{{ filters.q }}"
-                placeholder="Search transactions..."
-            >
-
-            <label for="type">Transaction Type</label>
-            <select id="type" name="type">
-                <option value="">All Types</option>
-                <option value="income"
-                    {% if filters.type == "income" %}selected{% endif %}>
-                    Income
-                </option>
-                <option value="expense"
-                    {% if filters.type == "expense" %}selected{% endif %}>
-                    Expense
-                </option>
-            </select>
-
-            <label for="category_id">Category</label>
-            <select id="category_id" name="category_id">
-                <option value="">All Categories</option>
-
-                {% for category in categories %}
-                    <option
-                        value="{{ category.id }}"
-                        {% if filters.category_id == category.id %}selected{% endif %}
-                    >
-                        {{ category.name }} ({{ category.type }})
-                    </option>
-                {% endfor %}
-            </select>
-
-            <label for="start_date">From Date</label>
-            <input
-                type="date"
-                id="start_date"
-                name="start_date"
-                value="{{ filters.start_date }}"
-            >
-
-            <label for="end_date">To Date</label>
-            <input
-                type="date"
-                id="end_date"
-                name="end_date"
-                value="{{ filters.end_date }}"
-            >
-
-            <button type="submit">Apply Filters</button>
-
-            <a href="{{ url_for('main.transactions') }}">
-                Clear Filters
-            </a>
-
+        <form class="filter-grid" method="GET" action="{{ url_for('main.transactions') }}">
+            <div class="field filter-search">
+                <label for="q">Search description</label>
+                <input type="search" id="q" name="q" value="{{ filters.q }}" placeholder="Try “groceries”…">
+            </div>
+            <div class="field">
+                <label for="type">Transaction type</label>
+                <select id="type" name="type">
+                    <option value="">All types</option>
+                    <option value="income" {% if filters.type == "income" %}selected{% endif %}>Income</option>
+                    <option value="expense" {% if filters.type == "expense" %}selected{% endif %}>Expense</option>
+                </select>
+            </div>
+            <div class="field">
+                <label for="category_id">Category</label>
+                <select id="category_id" name="category_id">
+                    <option value="">All categories</option>
+                    {% for category in categories %}
+                        <option value="{{ category.id }}" {% if filters.category_id == category.id %}selected{% endif %}>
+                            {{ category.name }} ({{ category.type }})
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="field">
+                <label for="start_date">From date</label>
+                <input type="date" id="start_date" name="start_date" value="{{ filters.start_date }}">
+            </div>
+            <div class="field">
+                <label for="end_date">To date</label>
+                <input type="date" id="end_date" name="end_date" value="{{ filters.end_date }}">
+            </div>
+            <div class="filter-actions">
+                <button type="submit">Apply filters</button>
+                <a class="button button-secondary" href="{{ url_for('main.transactions') }}">Clear</a>
+            </div>
         </form>
     </section>
 
     <section>
-        <h2>All Transactions</h2>
+        <div class="section-heading">
+            <div>
+                <p class="eyebrow">Your ledger</p>
+                <h2>All transactions</h2>
+            </div>
+            <span class="result-count">{{ pagination.total }} records</span>
+        </div>
 
         {% if pagination.items %}
-
             <div class="table-container">
                 <table>
                     <thead>
                         <tr>
-                            <th>Date</th>
-                            <th>Description</th>
-                            <th>Category</th>
-                            <th>Type</th>
-                            <th>Amount</th>
-                            <th>Actions</th>
+                            <th scope="col">Date</th>
+                            <th scope="col">Description</th>
+                            <th scope="col">Category</th>
+                            <th scope="col">Type</th>
+                            <th scope="col">Amount</th>
+                            <th scope="col">Actions</th>
                         </tr>
                     </thead>
-
                     <tbody>
                         {% for transaction in pagination.items %}
                             <tr>
-                                <td>
-                                    {{ transaction.date.strftime("%d %b %Y") }}
-                                </td>
-
-                                <td>
-                                    {{ transaction.description or "No description" }}
-                                </td>
-
-                                <td>
-                                    {{ transaction.category.name
-                                       if transaction.category
-                                       else "Uncategorized" }}
-                                </td>
-
-                                <td>{{ transaction.type|title }}</td>
-
-                                <td>
-                                    KES {{ "{:,.2f}".format(transaction.amount) }}
-                                </td>
-
-                                <td>
-                                    <a href="{{ url_for(
-                                        'main.edit_transaction',
-                                        transaction_id=transaction.id
-                                    ) }}">
-                                        Edit
-                                    </a>
-
-                                    <form
-                                        method="POST"
-                                        action="{{ url_for(
-                                            'main.remove_transaction',
-                                            transaction_id=transaction.id
-                                        ) }}"
-                                        onsubmit="return confirm('Delete this transaction?');"
-                                    >
-                                        <input
-                                            type="hidden"
-                                            name="csrf_token"
-                                            value="{{ csrf_token() }}"
-                                        >
-
-                                        <button type="submit">
-                                            Delete
-                                        </button>
+                                <td>{{ transaction.date.strftime("%d %b %Y") }}</td>
+                                <td class="transaction-description">{{ transaction.description or "No description" }}</td>
+                                <td>{{ transaction.category.name if transaction.category else "Uncategorized" }}</td>
+                                <td><span class="type-badge {{ transaction.type }}">{{ transaction.type|title }}</span></td>
+                                <td class="amount-cell {{ transaction.type }}">KES {{ "{:,.2f}".format(transaction.amount) }}</td>
+                                <td class="table-actions">
+                                    <a href="{{ url_for('main.edit_transaction', transaction_id=transaction.id) }}">Edit</a>
+                                    <form method="POST"
+                                          action="{{ url_for('main.remove_transaction', transaction_id=transaction.id) }}"
+                                          onsubmit="return confirm('Delete this transaction?');">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button class="button-danger" type="submit">Delete</button>
                                     </form>
                                 </td>
                             </tr>
@@ -183,41 +100,20 @@
             </div>
 
             <div class="pagination">
-
                 {% if pagination.has_prev %}
-                    <a href="{{ url_for(
-                        'main.transactions',
-                        page=pagination.prev_num,
-                        **filters
-                    ) }}">
-                        Previous
-                    </a>
+                    <a href="{{ url_for('main.transactions', page=pagination.prev_num, **filters) }}">Previous</a>
                 {% endif %}
-
-                <span>
-                    Page {{ pagination.page }} of {{ pagination.pages }}
-                </span>
-
+                <span>Page {{ pagination.page }} of {{ pagination.pages }}</span>
                 {% if pagination.has_next %}
-                    <a href="{{ url_for(
-                        'main.transactions',
-                        page=pagination.next_num,
-                        **filters
-                    ) }}">
-                        Next
-                    </a>
+                    <a href="{{ url_for('main.transactions', page=pagination.next_num, **filters) }}">Next</a>
                 {% endif %}
-
             </div>
-
         {% else %}
-
-            <p>No transactions match your search.</p>
-
+            <div class="empty-state">
+                <h3>No matching transactions</h3>
+                <p>Try changing the filters or record a new transaction.</p>
+                <a class="button button-primary" href="{{ url_for('main.add_transaction') }}">Add transaction</a>
+            </div>
         {% endif %}
     </section>
-
-</main>
-
-</body>
-</html>
+{% endblock %}

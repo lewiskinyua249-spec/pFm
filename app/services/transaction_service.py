@@ -154,16 +154,28 @@ def create_transaction(
     return transaction
 
 
-def get_user_transactions(user_id, limit=None):
+def get_user_transactions(
+    user_id,
+    limit=None,
+    start_date=None,
+    end_date=None
+):
 
     query = (
         Transaction.query
         .filter_by(user_id=user_id)
-        .order_by(
-            Transaction.date.desc(),
-            Transaction.created_at.desc(),
-            Transaction.id.desc()
-        )
+    )
+
+    if start_date is not None:
+        query = query.filter(Transaction.date >= start_date)
+
+    if end_date is not None:
+        query = query.filter(Transaction.date <= end_date)
+
+    query = query.order_by(
+        Transaction.date.desc(),
+        Transaction.created_at.desc(),
+        Transaction.id.desc()
     )
 
     if limit is not None:
@@ -341,9 +353,9 @@ def get_filtered_transactions(
     )
 
 
-def calculate_balance(user_id):
+def calculate_balance(user_id, start_date=None, end_date=None):
 
-    results = db.session.query(
+    query = db.session.query(
         func.coalesce(
             func.sum(
                 case(
@@ -364,9 +376,15 @@ def calculate_balance(user_id):
             0
         ).label("expenses")
 
-    ).filter(
-        Transaction.user_id == user_id
-    ).one()
+    ).filter(Transaction.user_id == user_id)
+
+    if start_date is not None:
+        query = query.filter(Transaction.date >= start_date)
+
+    if end_date is not None:
+        query = query.filter(Transaction.date <= end_date)
+
+    results = query.one()
 
     total_income = Decimal(str(results.income))
     total_expenses = Decimal(str(results.expenses))

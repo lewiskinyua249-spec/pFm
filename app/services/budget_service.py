@@ -172,6 +172,82 @@ def get_budget_by_id(budget_id, user_id):
     ).first()
 
 
+def update_budget(
+    budget_id,
+    user_id,
+    amount,
+    month,
+    year,
+    category_id=None
+):
+
+    budget = get_budget_by_id(budget_id, user_id)
+
+    if not budget:
+        raise ValueError("Budget not found.")
+
+    amount = validate_budget_amount(amount)
+    month, year = validate_month_year(month, year)
+    category_id = validate_budget_category(user_id, category_id)
+
+    existing_query = Budget.query.filter(
+        Budget.user_id == user_id,
+        Budget.month == month,
+        Budget.year == year,
+        Budget.id != budget.id
+    )
+
+    if category_id is None:
+        existing_query = existing_query.filter(
+            Budget.category_id.is_(None)
+        )
+    else:
+        existing_query = existing_query.filter_by(
+            category_id=category_id
+        )
+
+    if existing_query.first():
+        raise ValueError(
+            "A budget already exists for this category and month."
+        )
+
+    budget.amount = amount
+    budget.month = month
+    budget.year = year
+    budget.category_id = category_id
+
+    try:
+        db.session.commit()
+
+    except IntegrityError:
+        db.session.rollback()
+        raise ValueError("This budget already exists.")
+
+    except Exception:
+        db.session.rollback()
+        raise
+
+    return budget
+
+
+def delete_budget(budget_id, user_id):
+
+    budget = get_budget_by_id(budget_id, user_id)
+
+    if not budget:
+        raise ValueError("Budget not found.")
+
+    try:
+        db.session.delete(budget)
+        db.session.commit()
+
+    except Exception:
+        db.session.rollback()
+        raise
+
+    return True
+
+
 def calculate_budget_spending(budget):
 
     start_date = date(

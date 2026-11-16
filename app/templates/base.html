@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#f5f7f4">
+    <title>{% block title %}Personal Finance{% endblock %} | Personal Finance Manager</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    {% block head %}{% endblock %}
+</head>
+<body class="{% block body_class %}app-body{% endblock %}">
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    {% if current_user.is_authenticated %}
+        <div class="app-shell">
+            <aside class="sidebar">
+                <a class="brand" href="{{ url_for('main.dashboard') }}">
+                    <span class="brand-mark" aria-hidden="true">P</span>
+                    <span class="brand-name">Personal Finance</span>
+                </a>
+
+                <p class="nav-label">Workspace</p>
+                <nav class="primary-nav" aria-label="Main navigation">
+                    <a class="nav-link {% if request.endpoint == 'main.dashboard' %}is-active{% endif %}"
+                       href="{{ url_for('main.dashboard') }}">
+                        <span class="nav-icon" aria-hidden="true">⌂</span>
+                        Dashboard
+                    </a>
+                    <a class="nav-link {% if request.endpoint in ['main.transactions', 'main.add_transaction', 'main.edit_transaction'] %}is-active{% endif %}"
+                       href="{{ url_for('main.transactions') }}">
+                        <span class="nav-icon" aria-hidden="true">↔</span>
+                        Transactions
+                    </a>
+                    <a class="nav-link {% if request.endpoint in ['main.budgets', 'main.edit_budget'] %}is-active{% endif %}"
+                       href="{{ url_for('main.budgets') }}">
+                        <span class="nav-icon" aria-hidden="true">▤</span>
+                        Budgets
+                    </a>
+                    <a class="nav-link {% if request.endpoint in ['main.savings_goals', 'main.add_savings_progress'] %}is-active{% endif %}"
+                       href="{{ url_for('main.savings_goals') }}">
+                        <span class="nav-icon" aria-hidden="true">◎</span>
+                        Savings Goals
+                    </a>
+                    <a class="nav-link {% if request.endpoint == 'main.reports' %}is-active{% endif %}"
+                       href="{{ url_for('main.reports') }}">
+                        <span class="nav-icon" aria-hidden="true">▥</span>
+                        Reports
+                    </a>
+                    <a class="nav-link {% if request.endpoint in ['main.categories', 'main.edit_category'] %}is-active{% endif %}"
+                       href="{{ url_for('main.categories') }}">
+                        <span class="nav-icon" aria-hidden="true">▦</span>
+                        Categories
+                    </a>
+                </nav>
+
+                <div class="sidebar-bottom">
+                    <p class="nav-label">Your data</p>
+                    <a class="utility-link" href="{{ url_for('main.export_transactions') }}">Export transactions</a>
+                    <a class="utility-link" href="{{ url_for('main.download_personal_backup') }}">Download backup</a>
+                    <div class="profile-row">
+                        <span class="avatar" aria-hidden="true">{{ current_user.username[:1]|upper }}</span>
+                        <span class="profile-name">{{ current_user.username }}</span>
+                        <form method="POST" action="{{ url_for('auth.logout') }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button class="logout-button" type="submit">Log out</button>
+                        </form>
+                    </div>
+                </div>
+            </aside>
+
+            <div class="workspace">
+                <header class="topbar">
+                    <p class="topbar-note">A little more clarity, every day.</p>
+                    <a class="button button-primary topbar-action"
+                       href="{{ url_for('main.add_transaction') }}">
+                        <span aria-hidden="true">+</span> Add transaction
+                    </a>
+                </header>
+
+                <main class="page-content" id="main-content">
+                    <div class="page-heading">
+                        <div>
+                            <p class="eyebrow">{% block eyebrow %}Your finances{% endblock %}</p>
+                            <h1>{% block page_title %}Overview{% endblock %}</h1>
+                            {% block page_description %}{% endblock %}
+                        </div>
+                        <div class="page-actions">{% block page_actions %}{% endblock %}</div>
+                    </div>
+
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            <div class="flash-stack" aria-live="polite">
+                                {% for category, message in messages %}
+                                    <div class="flash-message {{ category }}"
+                                         {% if category == "error" %}role="alert"{% endif %}>
+                                        {{ message }}
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    {% endwith %}
+
+                    {% block content %}{% endblock %}
+                </main>
+
+                <footer class="app-footer">
+                    <span>Small steps add up.</span>
+                    <span>Personal Finance Manager</span>
+                </footer>
+            </div>
+        </div>
+    {% else %}
+        <main class="auth-shell" id="main-content">
+            <a class="brand auth-brand" href="{{ url_for('auth.login') }}">
+                <span class="brand-mark" aria-hidden="true">P</span>
+                <span class="brand-name">Personal Finance</span>
+            </a>
+            <div class="auth-card">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        <div class="flash-stack" aria-live="polite">
+                            {% for category, message in messages %}
+                                <div class="flash-message {{ category }}"
+                                     {% if category == "error" %}role="alert"{% endif %}>
+                                    {{ message }}
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                {% endwith %}
+                {% block auth_content %}{% endblock %}
+            </div>
+            <p class="auth-note">A calmer way to keep an eye on your money.</p>
+        </main>
+    {% endif %}
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>
