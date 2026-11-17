@@ -5,6 +5,10 @@
 {% block page_description %}
     <p class="page-description">A clear record of what is coming in and going out.</p>
 {% endblock %}
+{% block page_actions %}
+    <a class="button button-secondary" href="{{ url_for('main.import_transactions') }}">Import CSV</a>
+    <a class="button button-primary" href="{{ url_for('main.add_transaction') }}">Add transaction</a>
+{% endblock %}
 
 {% block content %}
     <section>

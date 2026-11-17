@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}Import transactions{% endblock %}
+{% block page_title %}Import transactions{% endblock %}
+{% block page_description %}
+    <p class="page-description">Bring in a CSV export, review every row, and choose what to add to your ledger.</p>
+{% endblock %}
+
+{% block content %}
+    <section class="form-panel import-upload-panel">
+        <div class="section-heading">
+            <div>
+                <p class="eyebrow">Transaction history</p>
+                <h2>Upload a CSV file</h2>
+            </div>
+        </div>
+        <p class="import-guidance">
+            Use columns <strong>Date, Type, Amount</strong>; Category and Description are optional.
+            Dates should use YYYY-MM-DD, types should be income or expense, and amounts should be positive
+            (for example 1250.00 or KES 1,250.00).
+            Category names must match your existing categories. Files are limited to 2 MB and 1,000 transactions.
+        </p>
+        <form class="import-upload-form" method="POST"
+              action="{{ url_for('main.import_transactions') }}"
+              enctype="multipart/form-data">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="field">
+                <label for="transaction-csv">CSV file</label>
+                <input type="file" id="transaction-csv" name="file" accept=".csv,text/csv" required>
+            </div>
+            <button type="submit" name="action" value="preview">Validate and preview</button>
+        </form>
+        <p class="field-hint">
+            You can use a CSV exported from this app as a starting point.
+            <a href="{{ url_for('main.export_transactions') }}">Download your transactions</a>.
+        </p>
+    </section>
+
+    {% if preview %}
+        <section class="import-preview-section">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">Review before importing</p>
+                    <h2>{{ preview.filename }}</h2>
+                </div>
+            </div>
+            <div class="import-summary" aria-label="Import preview summary">
+                <div><strong>{{ preview.ready_count }}</strong><span>Ready to import</span></div>
+                <div><strong>{{ preview.duplicate_count }}</strong><span>Duplicates</span></div>
+                <div><strong>{{ preview.invalid_count }}</strong><span>Rows with errors</span></div>
+            </div>
+            <div class="table-container import-table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th scope="col">CSV row</th>
+                            <th scope="col">Date</th>
+                            <th scope="col">Description</th>
+                            <th scope="col">Category</th>
+                            <th scope="col">Type</th>
+                            <th scope="col">Amount</th>
+                            <th scope="col">Review</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in preview.rows[:25] %}
+                            <tr>
+                                <td>{{ row.row_number }}</td>
+                                <td>{{ row.date or "—" }}</td>
+                                <td>{{ row.description or "—" }}</td>
+                                <td>{{ row.category or "Uncategorized" }}</td>
+                                <td>{{ row.type|title if row.type else "—" }}</td>
+                                <td>{% if row.amount_display %}KES {{ row.amount_display }}{% else %}—{% endif %}</td>
+                                <td>
+                                    {% if row.status == "ready" %}
+                                        <span class="import-row-status ready">Ready</span>
+                                    {% elif row.status == "duplicate" %}
+                                        <span class="import-row-status duplicate">Duplicate</span>
+                                    {% else %}
+                                        <span class="import-row-status invalid">Needs attention</span>
+                                    {% endif %}
+                                    {% if row.errors %}
+                                        <ul class="import-row-errors">
+                                            {% for error in row.errors %}
+                                                <li>{{ error }}</li>
+                                            {% endfor %}
+                                        </ul>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if preview.rows|length > 25 %}
+                <p class="field-hint">Showing the first 25 of {{ preview.rows|length }} transaction rows. Counts include the entire file.</p>
+            {% endif %}
+            <div class="form-actions import-confirm-actions">
+                {% if preview.ready_count %}
+                    <form method="POST" action="{{ url_for('main.import_transactions') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="preview_token" value="{{ preview_token }}">
+                        <button type="submit" name="action" value="confirm">
+                            Import {{ preview.ready_count }} transaction(s)
+                        </button>
+                    </form>
+                {% endif %}
+                <form method="POST" action="{{ url_for('main.import_transactions') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="preview_token" value="{{ preview_token }}">
+                    <button class="button button-secondary" type="submit" name="action" value="cancel">Cancel</button>
+                </form>
+            </div>
+        </section>
+    {% endif %}
+{% endblock %}

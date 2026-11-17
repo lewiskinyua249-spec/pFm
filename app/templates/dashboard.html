@@ -3,7 +3,7 @@
 {% block title %}Overview{% endblock %}
 {% block page_title %}Good to see you, {{ user.username }}{% endblock %}
 {% block page_description %}
-    <p class="page-description">Here is your money at a glance. Choose a period to see how things are moving.</p>
+    <p class="page-description">Review what came in, what went out, and which budgets may need attention.</p>
 {% endblock %}
 {% block page_actions %}
     <a class="button button-secondary" href="{{ url_for('main.transactions') }}">View transactions</a>
@@ -13,8 +13,8 @@
     <section class="overview-section">
         <div class="section-heading">
             <div>
-                <p class="eyebrow">Your snapshot</p>
-                <h2>Financial overview</h2>
+                <p class="eyebrow">{% if is_weekly_check_in %}Weekly check-in{% else %}Your snapshot{% endif %}</p>
+                <h2>Money in and out</h2>
             </div>
             <span class="period-caption">{{ start_date }} — {{ end_date }}</span>
         </div>
@@ -33,7 +33,7 @@
 
         <div class="balance-panel">
             <div>
-                <p class="balance-label">Net balance for this period</p>
+                <p class="balance-label">Income minus expenses for this period</p>
                 <p class="balance-value">KES {{ "{:,.2f}".format(summary.balance) }}</p>
             </div>
             <span class="balance-mark" aria-hidden="true">+</span>
@@ -51,6 +51,68 @@
                 <p class="metric-note">Money out during this period</p>
             </article>
         </div>
+    </section>
+
+    <section class="dashboard-budget-section">
+        <div class="section-heading">
+            <div>
+                <p class="eyebrow">Month to date</p>
+                <h2>Budget pace</h2>
+            </div>
+            <a class="text-link" href="{{ url_for('main.budgets') }}">Manage budgets</a>
+        </div>
+
+        {% if budget_pacing %}
+            <p class="pacing-disclaimer">Month-end projections are estimates based on spending so far this month.</p>
+            <div class="budget-grid">
+                {% for item in budget_pacing %}
+                    {% set budget = item.budget %}
+                    {% set pacing = item.pacing %}
+                    <article class="budget-card dashboard-budget-card">
+                        <div class="budget-card-heading">
+                            <div>
+                                <h3>{{ budget.category.name if budget.category else "Overall Budget" }}</h3>
+                                <p class="pacing-note">
+                                    {% if pacing.exceeded %}
+                                        Already {{ "KES {:,.2f}".format(-pacing.remaining) }} over budget.
+                                    {% elif pacing.projected_over_budget %}
+                                        At this pace, projected to exceed the budget by
+                                        KES {{ "{:,.2f}".format(pacing.projected_spending - budget.amount) }}.
+                                    {% else %}
+                                        On pace to stay within this month's budget.
+                                    {% endif %}
+                                </p>
+                            </div>
+                            <span class="budget-status {% if pacing.exceeded or pacing.projected_over_budget %}over-budget{% else %}on-budget{% endif %}">
+                                {% if pacing.exceeded %}Over budget{% elif pacing.projected_over_budget %}Watch pace{% else %}On pace{% endif %}
+                            </span>
+                        </div>
+                        <div class="budget-amounts">
+                            <div>
+                                <span>Spent so far</span>
+                                <strong>KES {{ "{:,.2f}".format(pacing.spent) }}</strong>
+                            </div>
+                            <div>
+                                <span>Month-end estimate</span>
+                                <strong>KES {{ "{:,.2f}".format(pacing.projected_spending) }}</strong>
+                            </div>
+                        </div>
+                        <progress value="{{ [pacing.percentage, 100]|min }}" max="100"
+                                  aria-label="{{ budget.category.name if budget.category else 'Overall' }} budget: {{ '%.1f'|format(pacing.percentage) }}% used"></progress>
+                        <p class="budget-remaining">
+                            <span>KES {{ "{:,.2f}".format(pacing.remaining) }} remaining of KES {{ "{:,.2f}".format(budget.amount) }}</span>
+                            <span>{{ "%.1f"|format(pacing.percentage) }}% used</span>
+                        </p>
+                    </article>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="empty-state dashboard-budget-empty">
+                <h3>Give your spending a plan</h3>
+                <p>Create a monthly budget to see how your current spending pace compares.</p>
+                <a class="button button-secondary" href="{{ url_for('main.budgets') }}">Create a budget</a>
+            </div>
+        {% endif %}
     </section>
 
     <section>

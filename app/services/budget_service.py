@@ -1,6 +1,7 @@
 
 from datetime import date
 from decimal import Decimal, InvalidOperation
+import calendar
 
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
@@ -248,7 +249,7 @@ def delete_budget(budget_id, user_id):
     return True
 
 
-def calculate_budget_spending(budget):
+def calculate_budget_spending(budget, through_date=None):
 
     start_date = date(
         budget.year,
@@ -257,14 +258,14 @@ def calculate_budget_spending(budget):
     )
 
     if budget.month == 12:
-        end_date = date(
+        period_end = date(
             budget.year + 1,
             1,
             1
         )
 
     else:
-        end_date = date(
+        period_end = date(
             budget.year,
             budget.month + 1,
             1
@@ -279,8 +280,11 @@ def calculate_budget_spending(budget):
         Transaction.user_id == budget.user_id,
         Transaction.type == "expense",
         Transaction.date >= start_date,
-        Transaction.date < end_date
+        Transaction.date < period_end
     )
+
+    if through_date is not None:
+        query = query.filter(Transaction.date <= through_date)
 
     if budget.category_id is not None:
         query = query.filter(
@@ -303,4 +307,27 @@ def calculate_budget_spending(budget):
         "remaining": remaining,
         "percentage": float(percentage),
         "exceeded": spent > budget.amount
+    }
+
+
+def calculate_budget_pacing(budget, as_of=None):
+    as_of = as_of or date.today()
+    if (budget.year, budget.month) != (as_of.year, as_of.month):
+        raise ValueError("Budget pacing is only available for the current month.")
+
+    spending = calculate_budget_spending(budget, through_date=as_of)
+    days_in_month = calendar.monthrange(as_of.year, as_of.month)[1]
+    projected_spending = (
+        spending["spent"] * days_in_month / as_of.day
+    ).quantize(Decimal("0.01"))
+
+    return {
+        **spending,
+        "projected_spending": projected_spending,
+        "projected_percentage": float(
+            (projected_spending / budget.amount) * 100
+        ),
+        "projected_over_budget": projected_spending > budget.amount,
+        "days_elapsed": as_of.day,
+        "days_in_month": days_in_month
     }

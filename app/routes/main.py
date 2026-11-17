@@ -1,5 +1,5 @@
 
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 import io
 import json
@@ -10,6 +10,7 @@ from flask import send_file
 
 from flask import (
     Blueprint,
+    current_app,
     render_template,
     redirect,
     url_for,
@@ -33,6 +34,14 @@ from app.services.transaction_service import (
     update_transaction,
     delete_transaction
 )
+from app.services.transaction_import_service import (
+    MAX_IMPORT_BYTES,
+    delete_staged_transaction_import,
+    get_staged_transaction_import,
+    import_staged_transactions,
+    preview_transaction_csv,
+    stage_transaction_import
+)
 
 from app.services.category_service import (
     create_category,
@@ -46,6 +55,7 @@ from app.services.budget_service import (
     create_budget,
     get_user_budgets,
     calculate_budget_spending,
+    calculate_budget_pacing,
     get_budget_by_id,
     update_budget,
     delete_budget
@@ -70,7 +80,7 @@ main = Blueprint("main", __name__)
 def dashboard():
 
     today = date.today()
-    default_start = today.replace(day=1)
+    default_start = today - timedelta(days=today.weekday())
     start_date_value = request.args.get(
         "start_date",
         default_start.isoformat()
@@ -107,11 +117,28 @@ def dashboard():
         end_date=end_date
     )
 
+    current_budgets = get_user_budgets(
+        current_user.id,
+        month=today.month,
+        year=today.year
+    )
+    budget_pacing = [
+        {
+            "budget": budget,
+            "pacing": calculate_budget_pacing(budget, as_of=today)
+        }
+        for budget in current_budgets
+    ]
+
     return render_template(
         "dashboard.html",
         user=current_user,
         summary=summary,
         transactions=transactions,
+        budget_pacing=budget_pacing,
+        is_weekly_check_in=(
+            start_date == default_start and end_date == today
+        ),
         start_date=start_date.isoformat(),
         end_date=end_date.isoformat()
     )
@@ -212,6 +239,93 @@ def add_transaction():
     return render_template(
         "add_transaction.html",
         categories=categories
+    )
+
+
+@main.route("/transactions/import", methods=["GET", "POST"])
+@login_required
+def import_transactions():
+    if request.method == "GET":
+        return render_template(
+            "import_transactions.html",
+            preview=None,
+            preview_token=None
+        )
+
+    action = request.form.get("action", "")
+    token = request.form.get("preview_token", "")
+
+    if action == "cancel":
+        if get_staged_transaction_import(current_user.id, token):
+            delete_staged_transaction_import(token)
+        flash("Transaction import cancelled.", "success")
+        return redirect(url_for("main.transactions"))
+
+    if action == "confirm":
+        preview = get_staged_transaction_import(current_user.id, token)
+        if preview is None:
+            flash("That import preview expired. Please upload the CSV again.", "error")
+            return redirect(url_for("main.import_transactions"))
+
+        try:
+            imported_count, duplicate_count = import_staged_transactions(
+                current_user.id,
+                preview["rows"]
+            )
+        except ValueError as error:
+            flash(str(error), "error")
+            return redirect(url_for("main.import_transactions"))
+        except Exception:
+            current_app.logger.exception(
+                "Transaction CSV import failed for user %s",
+                current_user.id
+            )
+            flash("The transactions could not be imported. No rows were saved.", "error")
+            return redirect(url_for("main.import_transactions"))
+
+        delete_staged_transaction_import(token)
+        flash(
+            f"Imported {imported_count} transaction(s); skipped "
+            f"{duplicate_count} duplicate(s).",
+            "success"
+        )
+        return redirect(url_for("main.transactions"))
+
+    uploaded_file = request.files.get("file")
+    if not uploaded_file or not uploaded_file.filename:
+        flash("Choose a CSV file to upload.", "error")
+        return redirect(url_for("main.import_transactions"))
+    if not uploaded_file.filename.lower().endswith(".csv"):
+        flash("Choose a file with the .csv extension.", "error")
+        return redirect(url_for("main.import_transactions"))
+
+    content = uploaded_file.stream.read(MAX_IMPORT_BYTES + 1)
+    if len(content) > MAX_IMPORT_BYTES:
+        flash("CSV file must be 2 MB or smaller.", "error")
+        return redirect(url_for("main.import_transactions"))
+
+    try:
+        preview = preview_transaction_csv(current_user.id, content)
+        preview["filename"] = uploaded_file.filename[:255]
+        preview_token = stage_transaction_import(
+            current_user.id,
+            preview
+        )
+    except ValueError as error:
+        flash(str(error), "error")
+        return redirect(url_for("main.import_transactions"))
+    except Exception:
+        current_app.logger.exception(
+            "Transaction CSV preview failed for user %s",
+            current_user.id
+        )
+        flash("The CSV could not be prepared for import.", "error")
+        return redirect(url_for("main.import_transactions"))
+
+    return render_template(
+        "import_transactions.html",
+        preview=preview,
+        preview_token=preview_token
     )
 
 

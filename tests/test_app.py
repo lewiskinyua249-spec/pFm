@@ -1,16 +1,25 @@
 
+import csv
+import io
+import re
 from decimal import Decimal
 
 import pytest
 
 from app import create_app, db
-from app.models import User, SavingsGoal
+from app.models import User, SavingsGoal, Transaction
 
 from app.services.transaction_service import (
     create_transaction,
     get_user_transactions,
     get_transaction_by_id,
     calculate_balance
+)
+from app.services.transaction_import_service import (
+    get_staged_transaction_import,
+    import_staged_transactions,
+    preview_transaction_csv,
+    stage_transaction_import
 )
 
 from app.services.category_service import (
@@ -25,6 +34,7 @@ from app.services.budget_service import (
     create_budget,
     get_user_budgets,
     calculate_budget_spending,
+    calculate_budget_pacing,
     get_budget_by_id,
     update_budget,
     delete_budget
@@ -51,14 +61,12 @@ from app.services.export_service import (
 def app():
     """Create a separate application for testing."""
 
-    test_app = create_app()
-
-    test_app.config.update(
-        TESTING=True,
-        SQLALCHEMY_DATABASE_URI="sqlite://",
-        WTF_CSRF_ENABLED=False,
-        SECRET_KEY="test-secret-key"
-    )
+    test_app = create_app({
+        "TESTING": True,
+        "SQLALCHEMY_DATABASE_URI": "sqlite://",
+        "WTF_CSRF_ENABLED": False,
+        "SECRET_KEY": "test-secret-key"
+    })
 
     with test_app.app_context():
         db.create_all()
@@ -207,6 +215,86 @@ def test_dashboard_filters_summary_by_requested_dates(
     assert b"KES 250.00" in response.data
     assert b"KES 0.00" in response.data
     assert today.isoformat().encode() in response.data
+
+
+def test_dashboard_defaults_to_week_to_date_and_shows_current_budget(
+    app,
+    client,
+    registered_user
+):
+    with app.app_context():
+        today = date.today()
+        week_start = today - timedelta(days=today.weekday())
+        category = create_category(
+            user_id=registered_user["id"],
+            name="Groceries",
+            category_type="expense"
+        )
+        budget = create_budget(
+            user_id=registered_user["id"],
+            amount="1000.00",
+            month=today.month,
+            year=today.year,
+            category_id=category.id
+        )
+        create_transaction(
+            user_id=registered_user["id"],
+            amount="100.00",
+            transaction_type="expense",
+            category_id=category.id,
+            transaction_date=today
+        )
+    client.post(
+        "/login",
+        data={
+            "email": registered_user["email"],
+            "password": registered_user["password"]
+        }
+    )
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert f'value="{week_start.isoformat()}"'.encode() in response.data
+    assert b"Weekly check-in" in response.data
+    assert b"Budget pace" in response.data
+    assert b"Groceries" in response.data
+    assert b"Month-end estimate" in response.data
+
+
+def test_budget_pacing_uses_month_to_date_spending_only(
+    app,
+    registered_user
+):
+    with app.app_context():
+        today = date.today()
+        budget = create_budget(
+            user_id=registered_user["id"],
+            amount="1000.00",
+            month=today.month,
+            year=today.year
+        )
+        create_transaction(
+            user_id=registered_user["id"],
+            amount="100.00",
+            transaction_type="expense",
+            transaction_date=today
+        )
+        create_transaction(
+            user_id=registered_user["id"],
+            amount="900.00",
+            transaction_type="expense",
+            transaction_date=today + timedelta(days=1)
+        )
+
+        result = calculate_budget_pacing(budget, as_of=today)
+
+        assert result["spent"] == Decimal("100.00")
+        assert result["projected_spending"] == (
+            Decimal("100.00") * result["days_in_month"] / today.day
+        ).quantize(Decimal("0.01"))
+        assert result["projected_over_budget"] is (
+            result["projected_spending"] > budget.amount
+        )
 
 
 def test_budget_and_category_management_routes(
@@ -7902,3 +7990,180 @@ def test_auth_logout_displays_success_message(client, registered_user):
 
     assert response.status_code == 200
     assert b"You have been logged out." in response.data
+
+
+def test_transaction_csv_preview_classifies_rows_and_detects_duplicates(
+    app,
+    registered_user
+):
+    with app.app_context():
+        category = create_category(
+            user_id=registered_user["id"],
+            name="Groceries",
+            category_type="expense"
+        )
+        category_id = category.id
+
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["Date", "Type", "Category", "Description", "Amount"])
+        writer.writerow(["2026-11-17", "expense", "Groceries", "Market", "125.00"])
+        writer.writerow(["2026-11-17", "expense", "Groceries", "Market", "125.00"])
+        writer.writerow(["not-a-date", "income", "Groceries", "Invalid", "25.00"])
+
+        preview = preview_transaction_csv(
+            registered_user["id"],
+            output.getvalue().encode("utf-8")
+        )
+
+        assert preview["ready_count"] == 1
+        assert preview["duplicate_count"] == 1
+        assert preview["invalid_count"] == 1
+        assert preview["rows"][0]["category_id"] == category_id
+        assert preview["rows"][1]["status"] == "duplicate"
+        assert preview["rows"][2]["status"] == "invalid"
+
+
+def test_transaction_csv_preview_accepts_common_headers_and_kes_amounts(
+    app,
+    registered_user
+):
+    with app.app_context():
+        preview = preview_transaction_csv(
+            registered_user["id"],
+            (
+                "Posted Date,Transaction Type,Payee,Value\n"
+                f'{date.today().isoformat()},expense,Market,"KSh 1,250.00"\n'
+            ).encode("utf-8")
+        )
+
+        assert preview["ready_count"] == 1
+        assert preview["rows"][0]["amount"] == "1250.00"
+
+
+def test_transaction_csv_import_route_previews_then_confirms(
+    app,
+    client,
+    registered_user,
+    tmp_path
+):
+    with app.app_context():
+        create_category(
+            user_id=registered_user["id"],
+            name="Groceries",
+            category_type="expense"
+        )
+    app.config["TRANSACTION_IMPORT_STAGING_DIR"] = str(
+        tmp_path / "transaction_imports"
+    )
+    client.post(
+        "/login",
+        data={
+            "email": registered_user["email"],
+            "password": registered_user["password"]
+        }
+    )
+
+    import_date = date.today().isoformat()
+    csv_content = (
+        "Date,Type,Category,Description,Amount\n"
+        f"{import_date},expense,Groceries,Market,125.00\n"
+        f"{import_date},expense,Groceries,Market,125.00\n"
+        "invalid,expense,Groceries,Needs review,20.00\n"
+    )
+    response = client.post(
+        "/transactions/import",
+        data={
+            "action": "preview",
+            "file": (io.BytesIO(csv_content.encode("utf-8")), "ledger.csv")
+        },
+        content_type="multipart/form-data"
+    )
+
+    assert response.status_code == 200, response.location
+    assert b"1</strong><span>Ready to import" in response.data
+    assert b"1</strong><span>Duplicates" in response.data
+    assert b"1</strong><span>Rows with errors" in response.data
+    token_match = re.search(
+        rb'name="preview_token" value="([A-Za-z0-9_-]{32})"',
+        response.data
+    )
+    assert token_match
+    token = token_match.group(1).decode("ascii")
+
+    with app.app_context():
+        staged = get_staged_transaction_import(
+            registered_user["id"],
+            token
+        )
+        assert staged is not None
+        assert get_staged_transaction_import(
+            registered_user["id"] + 1,
+            token
+        ) is None
+
+    response = client.post(
+        "/transactions/import",
+        data={
+            "action": "confirm",
+            "preview_token": token
+        },
+        follow_redirects=True
+    )
+
+    assert response.status_code == 200
+    assert b"Imported 1 transaction(s); skipped 0 duplicate(s)." in response.data
+    with app.app_context():
+        assert Transaction.query.filter_by(
+            user_id=registered_user["id"]
+        ).count() == 1
+
+
+def test_transaction_csv_import_rechecks_duplicates_at_confirmation(
+    app,
+    registered_user
+):
+    with app.app_context():
+        category = create_category(
+            user_id=registered_user["id"],
+            name="Groceries",
+            category_type="expense"
+        )
+        preview = preview_transaction_csv(
+            registered_user["id"],
+            (
+                "Date,Type,Category,Description,Amount\n"
+                f"{date.today().isoformat()},expense,Groceries,Market,125.00\n"
+            ).encode("utf-8")
+        )
+        create_transaction(
+            user_id=registered_user["id"],
+            amount="125.00",
+            transaction_type="expense",
+            description="Market",
+            category_id=category.id,
+            transaction_date=date.today()
+        )
+
+        imported_count, duplicate_count = import_staged_transactions(
+            registered_user["id"],
+            preview["rows"]
+        )
+
+        assert imported_count == 0
+        assert duplicate_count == 1
+        assert Transaction.query.filter_by(
+            user_id=registered_user["id"]
+        ).count() == 1
+
+
+def test_transaction_csv_import_requires_expected_headers(
+    app,
+    registered_user
+):
+    with app.app_context():
+        with pytest.raises(ValueError, match="Date, Type, and Amount"):
+            preview_transaction_csv(
+                registered_user["id"],
+                b"Payee,Debit\nMarket,25.00\n"
+            )

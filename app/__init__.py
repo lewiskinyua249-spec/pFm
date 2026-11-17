@@ -16,12 +16,14 @@ login_manager = LoginManager()
 csrf = CSRFProtect()
 
 
-def create_app():
+def create_app(test_config=None):
 
     app = Flask(__name__)
 
     # Load application configuration
     app.config.from_object(Config)
+    if test_config is not None:
+        app.config.update(test_config)
 
     # Initialize extensions
     db.init_app(app)
