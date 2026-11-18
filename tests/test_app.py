@@ -77,6 +77,13 @@ def app():
         db.drop_all()
 
 
+def test_app_fixture_uses_in_memory_database(app):
+    assert app.config["SQLALCHEMY_DATABASE_URI"] == "sqlite://"
+
+    with app.app_context():
+        assert db.engine.url.database is None
+
+
 @pytest.fixture
 def client(app):
     """Provide a test client."""

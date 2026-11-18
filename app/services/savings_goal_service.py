@@ -128,7 +128,8 @@ def get_user_savings_goals(user_id):
     return SavingsGoal.query.filter_by(
         user_id=user_id
     ).order_by(
-        SavingsGoal.created_at.desc()
+        SavingsGoal.created_at.desc(),
+        SavingsGoal.id.desc()
     ).all()
 
 
