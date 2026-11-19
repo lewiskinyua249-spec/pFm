@@ -71,8 +71,10 @@
                 <header class="topbar">
                     <p class="topbar-note">A little more clarity, every day.</p>
                     <a class="button button-primary topbar-action"
+                       aria-label="Add transaction"
                        href="{{ url_for('main.add_transaction') }}">
-                        <span aria-hidden="true">+</span> Add transaction
+                        <span aria-hidden="true">+</span>
+                        <span class="topbar-action-label">Add transaction</span>
                     </a>
                 </header>
 

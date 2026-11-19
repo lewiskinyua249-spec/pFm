@@ -1714,14 +1714,35 @@ small {
 
 @media (max-width: 480px) {
     .topbar-note {
-        max-width: 150px;
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
         font-size: 11px;
     }
 
     .topbar-action {
-        min-height: 38px;
-        padding: 0 11px;
-        font-size: 11px;
+        width: 40px;
+        min-width: 40px;
+        min-height: 40px;
+        flex: 0 0 40px;
+        padding: 0;
+        border-radius: 12px;
+    }
+
+    .topbar-action-label {
+        display: none;
+    }
+
+    .topbar-action > span:first-child {
+        font-size: 24px;
+    }
+
+    .topbar {
+        gap: 12px;
+        padding-right: 14px;
+        padding-left: 14px;
     }
 
     .nav-link {
