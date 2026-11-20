@@ -4,6 +4,7 @@ from app.models.category import Category
 from app.models.transaction import Transaction
 from app.models.budget import Budget
 from app.models.savings_goal import SavingsGoal
+from app.models.recurring_item import RecurringItem
 
 
 __all__ = [
@@ -11,5 +12,6 @@ __all__ = [
     "Category",
     "Transaction",
     "Budget",
-    "SavingsGoal"
+    "SavingsGoal",
+    "RecurringItem"
 ]

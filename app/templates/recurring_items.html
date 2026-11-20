@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+
+{% block title %}{% if editing_item %}Edit{% else %}Recurring reminders{% endif %}{% endblock %}
+{% block page_title %}{% if editing_item %}Edit reminder{% else %}Recurring reminders{% endif %}{% endblock %}
+{% block page_description %}
+    <p class="page-description">Plan regular bills and income. Nothing is recorded automatically.</p>
+{% endblock %}
+
+{% block content %}
+    <section class="form-panel">
+        <div class="section-heading">
+            <div>
+                <p class="eyebrow">{% if editing_item %}Keep it current{% else %}Plan ahead{% endif %}</p>
+                <h2>{% if editing_item %}Reminder details{% else %}Add a recurring reminder{% endif %}</h2>
+            </div>
+            {% if editing_item %}
+                <a class="text-link" href="{{ url_for('main.recurring_items') }}">Cancel edit</a>
+            {% endif %}
+        </div>
+
+        <form class="form-grid" method="POST"
+              action="{% if editing_item %}{{ url_for('main.edit_recurring_item', item_id=editing_item.id) }}{% else %}{{ url_for('main.recurring_items') }}{% endif %}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <div class="field">
+                <label for="name">Name</label>
+                <input type="text" id="name" name="name" maxlength="100"
+                       value="{{ form_data.name }}" placeholder="e.g. Rent or salary" required>
+            </div>
+            <div class="field">
+                <label for="amount">Amount (KES)</label>
+                <input type="number" id="amount" name="amount" min="0.01"
+                       max="9999999999.99" step="0.01"
+                       value="{{ form_data.amount }}" placeholder="0.00" required>
+            </div>
+            <div class="field">
+                <label for="type">Type</label>
+                <select id="type" name="type" required>
+                    <option value="expense" {% if form_data.type == "expense" %}selected{% endif %}>Expense</option>
+                    <option value="income" {% if form_data.type == "income" %}selected{% endif %}>Income</option>
+                </select>
+            </div>
+            <div class="field">
+                <label for="frequency">Repeats</label>
+                <select id="frequency" name="frequency" required>
+                    <option value="weekly" {% if form_data.frequency == "weekly" %}selected{% endif %}>Every week</option>
+                    <option value="monthly" {% if form_data.frequency == "monthly" %}selected{% endif %}>Every month</option>
+                </select>
+            </div>
+            <div class="field">
+                <label for="next_due_date">Next due date</label>
+                <input type="date" id="next_due_date" name="next_due_date"
+                       value="{{ form_data.next_due_date }}" required>
+            </div>
+            <div class="field">
+                <label for="category_id">Category <span class="optional-label">Optional</span></label>
+                <select id="category_id" name="category_id">
+                    <option value="">No category</option>
+                    {% for category in categories %}
+                        <option value="{{ category.id }}"
+                                {% if form_data.category_id|string == category.id|string %}selected{% endif %}>
+                            {{ category.name }} ({{ category.type|capitalize }})
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-actions field-wide">
+                <button type="submit">{% if editing_item %}Save reminder{% else %}Add reminder{% endif %}</button>
+                {% if editing_item %}
+                    <a class="button button-secondary" href="{{ url_for('main.recurring_items') }}">Cancel</a>
+                {% endif %}
+            </div>
+        </form>
+    </section>
+
+    <section>
+        <div class="section-heading">
+            <div>
+                <p class="eyebrow">Bills and income</p>
+                <h2>Your schedule</h2>
+            </div>
+            <span class="result-count">{{ items|length }} reminders</span>
+        </div>
+
+        {% if items %}
+            <div class="recurring-grid">
+                {% for item in items %}
+                    <article class="recurring-card {% if not item.is_active %}is-paused{% endif %}">
+                        <div class="recurring-card-heading">
+                            <div>
+                                <span class="type-badge {{ item.type }}">{{ item.type|title }}</span>
+                                <h3>{{ item.name }}</h3>
+                            </div>
+                            <span class="recurring-status {% if not item.is_active %}paused{% elif item.next_due_date < today %}overdue{% else %}scheduled{% endif %}">
+                                {% if not item.is_active %}Paused{% elif item.next_due_date < today %}Overdue{% else %}Scheduled{% endif %}
+                            </span>
+                        </div>
+                        <p class="recurring-amount">KES {{ "{:,.2f}".format(item.amount) }}</p>
+                        <dl class="recurring-details">
+                            <div><dt>Repeats</dt><dd>{{ item.frequency|capitalize }}</dd></div>
+                            <div><dt>Next date</dt><dd>{{ item.next_due_date.strftime("%d %b %Y") }}</dd></div>
+                            <div><dt>Category</dt><dd>{{ item.category.name if item.category else "Uncategorized" }}</dd></div>
+                        </dl>
+                        {% if item.is_active and item.next_due_date <= today %}
+                            <div class="recurring-actions">
+                                <form method="POST" action="{{ url_for('main.handle_recurring_item_route', item_id=item.id) }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" name="action" value="record">Record now</button>
+                                </form>
+                                <form method="POST" action="{{ url_for('main.handle_recurring_item_route', item_id=item.id) }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button class="button button-secondary" type="submit" name="action" value="skip">Skip</button>
+                                </form>
+                            </div>
+                        {% elif item.is_active %}
+                            <p class="recurring-due-note">
+                                Due in {{ (item.next_due_date - today).days }} day(s).
+                                You can record or skip it when it is due.
+                            </p>
+                        {% endif %}
+                        <div class="card-actions">
+                            <a class="button button-secondary" href="{{ url_for('main.edit_recurring_item', item_id=item.id) }}">Edit</a>
+                            <form method="POST" action="{{ url_for('main.set_recurring_item_status', item_id=item.id) }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button class="button button-secondary" type="submit" name="action"
+                                        value="{% if item.is_active %}pause{% else %}resume{% endif %}">
+                                    {% if item.is_active %}Pause{% else %}Resume{% endif %}
+                                </button>
+                            </form>
+                            <form method="POST" action="{{ url_for('main.remove_recurring_item', item_id=item.id) }}"
+                                  onsubmit="return confirm('Delete this recurring reminder?');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button class="button-danger" type="submit">Delete</button>
+                            </form>
+                        </div>
+                    </article>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="empty-state">
+                <h3>No recurring reminders yet</h3>
+                <p>Add regular bills or income to see them coming up before they are due.</p>
+            </div>
+        {% endif %}
+    </section>
+{% endblock %}

@@ -115,6 +115,65 @@
         {% endif %}
     </section>
 
+    <section class="dashboard-recurring-section">
+        <div class="section-heading">
+            <div>
+                <p class="eyebrow">Next 30 days</p>
+                <h2>Upcoming bills and income</h2>
+            </div>
+            <a class="text-link" href="{{ url_for('main.recurring_items') }}">Manage reminders</a>
+        </div>
+
+        {% if upcoming_items %}
+            <p class="pacing-disclaimer">Reminders only. Record an item when it actually happens; nothing is added automatically.</p>
+            <div class="upcoming-list">
+                {% for item in upcoming_items %}
+                    <article class="upcoming-item">
+                        <div class="upcoming-date">
+                            <strong>{{ item.next_due_date.strftime("%d") }}</strong>
+                            <span>{{ item.next_due_date.strftime("%b") }}</span>
+                        </div>
+                        <div class="upcoming-description">
+                            <h3>{{ item.name }}</h3>
+                            <p>
+                                {{ item.type|title }}
+                                {% if item.category %} · {{ item.category.name }}{% endif %}
+                                {% if item.next_due_date < today %}
+                                    · <span class="overdue-label">Overdue</span>
+                                {% elif item.next_due_date == today %}
+                                    · Due today
+                                {% else %}
+                                    · Due in {{ (item.next_due_date - today).days }} day(s)
+                                {% endif %}
+                            </p>
+                        </div>
+                        <strong class="upcoming-amount {{ item.type }}">KES {{ "{:,.2f}".format(item.amount) }}</strong>
+                        {% if item.next_due_date <= today %}
+                            <div class="upcoming-actions">
+                                <form method="POST" action="{{ url_for('main.handle_recurring_item_route', item_id=item.id) }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <input type="hidden" name="return_to" value="dashboard">
+                                    <button type="submit" name="action" value="record">Record</button>
+                                </form>
+                                <form method="POST" action="{{ url_for('main.handle_recurring_item_route', item_id=item.id) }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <input type="hidden" name="return_to" value="dashboard">
+                                    <button class="button button-secondary" type="submit" name="action" value="skip">Skip</button>
+                                </form>
+                            </div>
+                        {% endif %}
+                    </article>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="empty-state dashboard-budget-empty">
+                <h3>No upcoming reminders</h3>
+                <p>Add regular bills or income so you can plan for them ahead of time.</p>
+                <a class="button button-secondary" href="{{ url_for('main.recurring_items') }}">Add a reminder</a>
+            </div>
+        {% endif %}
+    </section>
+
     <section>
         <div class="section-heading">
             <div>

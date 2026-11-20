@@ -77,6 +77,14 @@ class User(UserMixin, db.Model):
         cascade="all, delete-orphan"
     )
 
+    # User's recurring income and expense reminders
+    recurring_items = db.relationship(
+        "RecurringItem",
+        backref="user",
+        lazy=True,
+        cascade="all, delete-orphan"
+    )
+
     def set_password(self, password):
         """Hash and store the user's password."""
         self.password_hash = generate_password_hash(

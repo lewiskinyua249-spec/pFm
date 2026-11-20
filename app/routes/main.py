@@ -42,6 +42,16 @@ from app.services.transaction_import_service import (
     preview_transaction_csv,
     stage_transaction_import
 )
+from app.services.recurring_item_service import (
+    create_recurring_item,
+    delete_recurring_item,
+    get_recurring_item,
+    get_upcoming_recurring_items,
+    get_user_recurring_items,
+    handle_recurring_item,
+    set_recurring_item_active,
+    update_recurring_item
+)
 
 from app.services.category_service import (
     create_category,
@@ -129,6 +139,12 @@ def dashboard():
         }
         for budget in current_budgets
     ]
+    upcoming_items = get_upcoming_recurring_items(
+        current_user.id,
+        as_of=today,
+        days=30,
+        limit=5
+    )
 
     return render_template(
         "dashboard.html",
@@ -136,12 +152,200 @@ def dashboard():
         summary=summary,
         transactions=transactions,
         budget_pacing=budget_pacing,
+        upcoming_items=upcoming_items,
+        today=today,
         is_weekly_check_in=(
             start_date == default_start and end_date == today
         ),
         start_date=start_date.isoformat(),
         end_date=end_date.isoformat()
     )
+
+
+@main.route("/recurring", methods=["GET", "POST"])
+@login_required
+def recurring_items():
+    today = date.today()
+    form_data = {
+        "name": request.form.get("name", "").strip(),
+        "amount": request.form.get("amount", "").strip(),
+        "type": request.form.get("type", "expense").strip(),
+        "frequency": request.form.get("frequency", "monthly").strip(),
+        "next_due_date": request.form.get(
+            "next_due_date",
+            today.isoformat() if request.method == "GET" else ""
+        ).strip(),
+        "category_id": request.form.get("category_id", "").strip()
+    }
+
+    if request.method == "POST":
+        try:
+            create_recurring_item(
+                user_id=current_user.id,
+                name=form_data["name"],
+                amount=form_data["amount"],
+                item_type=form_data["type"],
+                frequency=form_data["frequency"],
+                next_due_date=form_data["next_due_date"],
+                category_id=form_data["category_id"] or None
+            )
+            flash("Recurring reminder created.", "success")
+            return redirect(url_for("main.recurring_items"))
+        except ValueError as error:
+            flash(str(error), "error")
+        except Exception:
+            current_app.logger.exception(
+                "Could not create recurring item for user %s",
+                current_user.id
+            )
+            flash("The recurring reminder could not be saved.", "error")
+
+    return render_template(
+        "recurring_items.html",
+        items=get_user_recurring_items(current_user.id),
+        categories=get_user_categories(current_user.id),
+        form_data=form_data,
+        editing_item=None,
+        today=today
+    )
+
+
+@main.route("/recurring/<int:item_id>/edit", methods=["GET", "POST"])
+@login_required
+def edit_recurring_item(item_id):
+    item = get_recurring_item(item_id, current_user.id)
+    if item is None:
+        flash("Recurring reminder not found.", "error")
+        return redirect(url_for("main.recurring_items"))
+
+    form_data = {
+        "name": request.form.get("name", item.name).strip(),
+        "amount": request.form.get("amount", str(item.amount)).strip(),
+        "type": request.form.get("type", item.type).strip(),
+        "frequency": request.form.get(
+            "frequency",
+            item.frequency
+        ).strip(),
+        "next_due_date": request.form.get(
+            "next_due_date",
+            item.next_due_date.isoformat()
+        ).strip(),
+        "category_id": request.form.get(
+            "category_id",
+            str(item.category_id or "")
+        ).strip()
+    }
+    if request.method == "POST":
+        try:
+            update_recurring_item(
+                item_id=item.id,
+                user_id=current_user.id,
+                name=form_data["name"],
+                amount=form_data["amount"],
+                item_type=form_data["type"],
+                frequency=form_data["frequency"],
+                next_due_date=form_data["next_due_date"],
+                category_id=form_data["category_id"] or None
+            )
+            flash("Recurring reminder updated.", "success")
+            return redirect(url_for("main.recurring_items"))
+        except ValueError as error:
+            flash(str(error), "error")
+        except Exception:
+            current_app.logger.exception(
+                "Could not update recurring item %s for user %s",
+                item.id,
+                current_user.id
+            )
+            flash("The recurring reminder could not be updated.", "error")
+
+    return render_template(
+        "recurring_items.html",
+        items=get_user_recurring_items(current_user.id),
+        categories=get_user_categories(current_user.id),
+        form_data=form_data,
+        editing_item=item,
+        today=date.today()
+    )
+
+
+@main.route("/recurring/<int:item_id>/handle", methods=["POST"])
+@login_required
+def handle_recurring_item_route(item_id):
+    action = request.form.get("action", "")
+    try:
+        transaction = handle_recurring_item(
+            item_id=item_id,
+            user_id=current_user.id,
+            action=action,
+            handled_date=date.today()
+        )
+        if transaction is not None:
+            flash(
+                "Transaction recorded and the next reminder scheduled.",
+                "success"
+            )
+        else:
+            flash("Occurrence skipped and the next reminder scheduled.", "success")
+    except ValueError as error:
+        flash(str(error), "error")
+    except Exception:
+        current_app.logger.exception(
+            "Could not handle recurring item %s for user %s",
+            item_id,
+            current_user.id
+        )
+        flash("The recurring reminder could not be updated.", "error")
+    if request.form.get("return_to") == "dashboard":
+        return redirect(url_for("main.dashboard"))
+    return redirect(url_for("main.recurring_items"))
+
+
+@main.route("/recurring/<int:item_id>/status", methods=["POST"])
+@login_required
+def set_recurring_item_status(item_id):
+    action = request.form.get("action", "")
+    if action not in {"pause", "resume"}:
+        flash("Invalid recurring reminder action.", "error")
+        return redirect(url_for("main.recurring_items"))
+    try:
+        set_recurring_item_active(
+            item_id,
+            current_user.id,
+            is_active=(action == "resume")
+        )
+        flash(
+            "Recurring reminder " + ("resumed." if action == "resume" else "paused."),
+            "success"
+        )
+    except ValueError as error:
+        flash(str(error), "error")
+    except Exception:
+        current_app.logger.exception(
+            "Could not change status for recurring item %s and user %s",
+            item_id,
+            current_user.id
+        )
+        flash("The recurring reminder status could not be changed.", "error")
+    return redirect(url_for("main.recurring_items"))
+
+
+@main.route("/recurring/<int:item_id>/delete", methods=["POST"])
+@login_required
+def remove_recurring_item(item_id):
+    try:
+        delete_recurring_item(item_id, current_user.id)
+        flash("Recurring reminder deleted.", "success")
+    except ValueError as error:
+        flash(str(error), "error")
+    except Exception:
+        current_app.logger.exception(
+            "Could not delete recurring item %s for user %s",
+            item_id,
+            current_user.id
+        )
+        flash("The recurring reminder could not be deleted.", "error")
+    return redirect(url_for("main.recurring_items"))
 
 
 @main.route("/transactions/add", methods=["GET", "POST"])

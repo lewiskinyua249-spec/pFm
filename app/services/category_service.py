@@ -3,7 +3,7 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 
 from app import db
-from app.models import Budget, Category, Transaction
+from app.models import Budget, Category, RecurringItem, Transaction
 
 
 def validate_category_name(name):
@@ -128,10 +128,12 @@ def update_category(category_id, user_id, name, category_type):
         is_referenced = (
             Transaction.query.filter_by(category_id=category.id).first()
             or Budget.query.filter_by(category_id=category.id).first()
+            or RecurringItem.query.filter_by(category_id=category.id).first()
         )
         if is_referenced:
             raise ValueError(
-                "A category used by transactions or budgets cannot change type."
+                "A category used by transactions, budgets, or recurring items "
+                "cannot change type."
             )
 
     category.name = name
@@ -161,10 +163,11 @@ def delete_category(category_id, user_id):
     is_referenced = (
         Transaction.query.filter_by(category_id=category.id).first()
         or Budget.query.filter_by(category_id=category.id).first()
+        or RecurringItem.query.filter_by(category_id=category.id).first()
     )
     if is_referenced:
         raise ValueError(
-            "This category is used by a transaction or budget. "
+            "This category is used by a transaction, budget, or recurring item. "
             "Remove those references before deleting it."
         )
 

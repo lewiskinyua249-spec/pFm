@@ -9,7 +9,8 @@ from app.models import (
     Transaction,
     Category,
     Budget,
-    SavingsGoal
+    SavingsGoal,
+    RecurringItem
 )
 
 
@@ -164,11 +165,17 @@ def generate_personal_backup(user_id):
         SavingsGoal.id.asc()
     ).all()
 
+    recurring_items = RecurringItem.query.filter_by(
+        user_id=user_id
+    ).order_by(
+        RecurringItem.id.asc()
+    ).all()
+
     backup = {
 
         "application": "Personal Finance Manager",
 
-        "backup_version": 1,
+        "backup_version": 2,
 
         "backup_date": datetime.now(
             timezone.utc
@@ -221,6 +228,21 @@ def generate_personal_backup(user_id):
                 "deadline": date_to_string(item.deadline)
             }
             for item in savings_goals
+        ],
+
+        "recurring_items": [
+            {
+                "id": item.id,
+                "name": item.name,
+                "amount": money_to_string(item.amount),
+                "type": item.type,
+                "frequency": item.frequency,
+                "next_due_date": date_to_string(item.next_due_date),
+                "day_of_month": item.day_of_month,
+                "is_active": item.is_active,
+                "category_id": item.category_id
+            }
+            for item in recurring_items
         ]
     }
 

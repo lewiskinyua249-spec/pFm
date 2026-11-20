@@ -2,12 +2,13 @@
 import csv
 import io
 import re
+import calendar
 from decimal import Decimal
 
 import pytest
 
 from app import create_app, db
-from app.models import User, SavingsGoal, Transaction
+from app.models import User, SavingsGoal, Transaction, RecurringItem
 
 from app.services.transaction_service import (
     create_transaction,
@@ -20,6 +21,16 @@ from app.services.transaction_import_service import (
     import_staged_transactions,
     preview_transaction_csv,
     stage_transaction_import
+)
+from app.services.recurring_item_service import (
+    create_recurring_item,
+    delete_recurring_item,
+    get_recurring_item,
+    get_user_recurring_items,
+    get_upcoming_recurring_items,
+    handle_recurring_item,
+    set_recurring_item_active,
+    update_recurring_item
 )
 
 from app.services.category_service import (
@@ -302,6 +313,305 @@ def test_budget_pacing_uses_month_to_date_spending_only(
         assert result["projected_over_budget"] is (
             result["projected_spending"] > budget.amount
         )
+
+
+def test_monthly_recurring_item_keeps_its_anchor_day_when_skipped(
+    app,
+    registered_user
+):
+    with app.app_context():
+        item = create_recurring_item(
+            user_id=registered_user["id"],
+            name="Rent",
+            amount="25000.00",
+            item_type="expense",
+            frequency="monthly",
+            next_due_date=date(2025, 1, 31)
+        )
+
+        handle_recurring_item(item.id, registered_user["id"], "skip")
+        assert get_recurring_item(
+            item.id,
+            registered_user["id"]
+        ).next_due_date == date(2025, 2, 28)
+
+        handle_recurring_item(item.id, registered_user["id"], "skip")
+        assert get_recurring_item(
+            item.id,
+            registered_user["id"]
+        ).next_due_date == date(2025, 3, 31)
+
+
+def test_recording_recurring_item_creates_transaction_and_advances_schedule(
+    app,
+    registered_user
+):
+    with app.app_context():
+        category = create_category(
+            user_id=registered_user["id"],
+            name="Utilities",
+            category_type="expense"
+        )
+        item = create_recurring_item(
+            user_id=registered_user["id"],
+            name="Electricity",
+            amount="1800.00",
+            item_type="expense",
+            frequency="weekly",
+            next_due_date=date.today(),
+            category_id=category.id
+        )
+
+        transaction = handle_recurring_item(
+            item.id,
+            registered_user["id"],
+            "record",
+            handled_date=date.today()
+        )
+
+        assert transaction is not None
+        assert transaction.description == "Electricity"
+        assert transaction.amount == Decimal("1800.00")
+        assert transaction.category_id == category.id
+        assert transaction.date == date.today()
+        assert get_recurring_item(
+            item.id,
+            registered_user["id"]
+        ).next_due_date == date.today() + timedelta(days=7)
+
+
+def test_recurring_item_can_be_updated_and_deleted_by_owner(
+    app,
+    registered_user,
+    another_user
+):
+    with app.app_context():
+        item = create_recurring_item(
+            registered_user["id"],
+            "Old bill",
+            "100",
+            "expense",
+            "weekly",
+            date.today()
+        )
+
+        with pytest.raises(ValueError, match="not found"):
+            update_recurring_item(
+                item.id,
+                another_user["id"],
+                "Changed",
+                "200",
+                "expense",
+                "weekly",
+                date.today()
+            )
+        with pytest.raises(ValueError, match="not found"):
+            delete_recurring_item(item.id, another_user["id"])
+
+        updated = update_recurring_item(
+            item.id,
+            registered_user["id"],
+            "Updated bill",
+            "200.00",
+            "income",
+            "monthly",
+            date(2026, 1, 31)
+        )
+        assert updated.name == "Updated bill"
+        assert updated.amount == Decimal("200.00")
+        assert updated.type == "income"
+        assert updated.frequency == "monthly"
+        assert updated.day_of_month == 31
+
+        assert delete_recurring_item(item.id, registered_user["id"])
+        assert get_user_recurring_items(registered_user["id"]) == []
+
+
+def test_upcoming_recurring_items_are_user_scoped_and_exclude_paused_items(
+    app,
+    registered_user,
+    another_user
+):
+    with app.app_context():
+        due_soon = create_recurring_item(
+            registered_user["id"],
+            "Internet",
+            "2500",
+            "expense",
+            "monthly",
+            date.today() + timedelta(days=3)
+        )
+        create_recurring_item(
+            another_user["id"],
+            "Other user's rent",
+            "10000",
+            "expense",
+            "monthly",
+            date.today() + timedelta(days=2)
+        )
+        paused = create_recurring_item(
+            registered_user["id"],
+            "Paused subscription",
+            "500",
+            "expense",
+            "weekly",
+            date.today() + timedelta(days=1)
+        )
+        set_recurring_item_active(
+            paused.id,
+            registered_user["id"],
+            False
+        )
+
+        upcoming = get_upcoming_recurring_items(
+            registered_user["id"],
+            as_of=date.today()
+        )
+
+        assert [item.id for item in upcoming] == [due_soon.id]
+        with pytest.raises(ValueError, match="not due yet"):
+            handle_recurring_item(
+                due_soon.id,
+                registered_user["id"],
+                "record",
+                handled_date=date.today()
+            )
+
+
+def test_category_used_by_recurring_item_cannot_be_deleted_or_retyped(
+    app,
+    registered_user
+):
+    with app.app_context():
+        category = create_category(
+            registered_user["id"],
+            "Rent",
+            "expense"
+        )
+        create_recurring_item(
+            registered_user["id"],
+            "Monthly rent",
+            "25000",
+            "expense",
+            "monthly",
+            date.today(),
+            category_id=category.id
+        )
+
+        with pytest.raises(ValueError, match="recurring items"):
+            update_category(
+                category.id,
+                registered_user["id"],
+                "Rent",
+                "income"
+            )
+        with pytest.raises(ValueError, match="recurring item"):
+            delete_category(category.id, registered_user["id"])
+
+
+def test_recurring_reminder_routes_create_record_and_skip(
+    app,
+    client,
+    registered_user
+):
+    _login_route_test_user(client, registered_user)
+    today = date.today()
+    response = client.post(
+        "/recurring",
+        data={
+            "name": "Payday",
+            "amount": "45000.00",
+            "type": "income",
+            "frequency": "monthly",
+            "next_due_date": today.isoformat(),
+            "category_id": ""
+        },
+        follow_redirects=True
+    )
+    assert response.status_code == 200
+    assert b"Payday" in response.data
+    with app.app_context():
+        item = RecurringItem.query.filter_by(
+            user_id=registered_user["id"],
+            name="Payday"
+        ).one()
+        item_id = item.id
+        assert Transaction.query.filter_by(
+            user_id=registered_user["id"]
+        ).count() == 0
+
+    response = client.post(
+        f"/recurring/{item_id}/handle",
+        data={"action": "record"},
+        follow_redirects=True
+    )
+    assert b"Transaction recorded" in response.data
+    with app.app_context():
+        transaction = Transaction.query.filter_by(
+            user_id=registered_user["id"],
+            description="Payday"
+        ).one()
+        item = db.session.get(RecurringItem, item_id)
+        next_month_index = today.year * 12 + today.month
+        next_year, zero_based_month = divmod(next_month_index, 12)
+        next_month = zero_based_month + 1
+        expected_day = min(
+            today.day,
+            calendar.monthrange(next_year, next_month)[1]
+        )
+        assert transaction.type == "income"
+        assert transaction.amount == Decimal("45000.00")
+        assert item.next_due_date == date(
+            next_year,
+            next_month,
+            expected_day
+        )
+
+    with app.app_context():
+        skip_item = create_recurring_item(
+            registered_user["id"],
+            "Weekly subscription",
+            "500.00",
+            "expense",
+            "weekly",
+            today
+        )
+        skip_item_id = skip_item.id
+
+    response = client.post(
+        f"/recurring/{skip_item_id}/handle",
+        data={"action": "skip"},
+        follow_redirects=True
+    )
+    assert b"Occurrence skipped" in response.data
+    with app.app_context():
+        assert Transaction.query.filter_by(
+            user_id=registered_user["id"]
+        ).count() == 1
+
+
+def test_dashboard_displays_upcoming_recurring_reminder(
+    app,
+    client,
+    registered_user
+):
+    with app.app_context():
+        create_recurring_item(
+            registered_user["id"],
+            "Water bill",
+            "1200.00",
+            "expense",
+            "monthly",
+            date.today() + timedelta(days=4)
+        )
+    _login_route_test_user(client, registered_user)
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert b"Upcoming bills and income" in response.data
+    assert b"Water bill" in response.data
+    assert b'value="record">Record</button>' not in response.data
 
 
 def test_budget_and_category_management_routes(
@@ -1147,7 +1457,7 @@ def test_json_backup_contains_only_users_records(
         )
 
         assert backup["application"] == "Personal Finance Manager"
-        assert backup["backup_version"] == 1
+        assert backup["backup_version"] == 2
 
         assert len(backup["transactions"]) == 1
 
@@ -7723,7 +8033,7 @@ def test_generate_personal_backup_has_required_metadata(
         )
 
         assert backup["application"] == "Personal Finance Manager"
-        assert backup["backup_version"] == 1
+        assert backup["backup_version"] == 2
         assert backup["user_id"] == registered_user["id"]
         assert "backup_date" in backup
 
@@ -7740,6 +8050,7 @@ def test_generate_personal_backup_contains_empty_collections(
         assert backup["categories"] == []
         assert backup["budgets"] == []
         assert backup["savings_goals"] == []
+        assert backup["recurring_items"] == []
 
 
 def test_generate_personal_backup_exports_transactions(
@@ -7834,6 +8145,37 @@ def test_generate_personal_backup_exports_savings_goals(
         assert saved_goal["target_amount"] == "5000.00"
         assert saved_goal["current_amount"] == "1000.00"
         assert saved_goal["deadline"] == "2026-12-31"
+
+
+def test_generate_personal_backup_exports_recurring_items(
+    app,
+    registered_user
+):
+    with app.app_context():
+        item = create_recurring_item(
+            registered_user["id"],
+            "Rent",
+            "25000.00",
+            "expense",
+            "monthly",
+            date(2026, 12, 31)
+        )
+
+        backup = generate_personal_backup(registered_user["id"])
+
+        assert backup["backup_version"] == 2
+        assert len(backup["recurring_items"]) == 1
+        assert backup["recurring_items"][0] == {
+            "id": item.id,
+            "name": "Rent",
+            "amount": "25000.00",
+            "type": "expense",
+            "frequency": "monthly",
+            "next_due_date": "2026-12-31",
+            "day_of_month": 31,
+            "is_active": True,
+            "category_id": None
+        }
 
 
 def test_generate_personal_backup_excludes_other_users(

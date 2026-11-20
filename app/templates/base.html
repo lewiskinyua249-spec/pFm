@@ -35,6 +35,11 @@
                         <span class="nav-icon" aria-hidden="true">▤</span>
                         Budgets
                     </a>
+                    <a class="nav-link {% if request.endpoint in ['main.recurring_items', 'main.edit_recurring_item'] %}is-active{% endif %}"
+                       href="{{ url_for('main.recurring_items') }}">
+                        <span class="nav-icon" aria-hidden="true">⟳</span>
+                        Recurring
+                    </a>
                     <a class="nav-link {% if request.endpoint in ['main.savings_goals', 'main.add_savings_progress'] %}is-active{% endif %}"
                        href="{{ url_for('main.savings_goals') }}">
                         <span class="nav-icon" aria-hidden="true">◎</span>
