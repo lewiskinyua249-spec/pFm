@@ -95,6 +95,111 @@
         </section>
     </div>
 
+    <section class="spending-insights-section">
+        <div class="section-heading">
+            <div>
+                <p class="eyebrow">From your recorded expenses</p>
+                <h2>Smart spending insights</h2>
+            </div>
+        </div>
+        <p class="insight-context">
+            Comparing {{ start_date }}–{{ end_date }} with
+            {{ spending_insights.comparison_start.isoformat() }}–{{ spending_insights.comparison_end.isoformat() }}.
+            Category changes are highlighted when they reach KES 100 and 20%.
+        </p>
+
+        <div class="insights-layout{% if not spending_insights.expense_mix %} no-expense-mix{% endif %}">
+            {% if spending_insights.expense_mix %}
+                <div class="expense-mix-panel">
+                    <div class="expense-mix-heading">
+                        <div>
+                            <h3>Expense mix</h3>
+                            <p>{{ start_date }}–{{ end_date }}</p>
+                        </div>
+                        <strong class="expense-mix-total">
+                            KES {{ "{:,.2f}".format(spending_insights.expense_total) }}
+                        </strong>
+                    </div>
+                    <div class="expense-mix-content">
+                        <div class="expense-donut-visual" aria-hidden="true">
+                            <svg class="expense-donut" viewBox="0 0 42 42">
+                                <circle class="expense-donut-track" cx="21" cy="21" r="15.915"></circle>
+                                <g transform="rotate(-90 21 21)">
+                                    {% for category in spending_insights.expense_mix %}
+                                        <circle class="expense-donut-segment" cx="21" cy="21" r="15.915"
+                                                stroke="{{ category.color }}"
+                                                stroke-dasharray="{{ category.dasharray }}"
+                                                stroke-dashoffset="{{ category.dashoffset }}"></circle>
+                                    {% endfor %}
+                                </g>
+                            </svg>
+                            <div class="expense-donut-center">
+                                <span>Expenses</span>
+                                <strong>by category</strong>
+                            </div>
+                        </div>
+                        <div class="expense-mix-legend" role="list" aria-label="Expense categories">
+                            {% for category in spending_insights.expense_mix %}
+                                <div class="expense-mix-row" role="listitem">
+                                    <span class="expense-mix-swatch"
+                                          style="--segment-color: {{ category.color }};"></span>
+                                    <span class="expense-mix-name">{{ category.name }}</span>
+                                    <strong>KES {{ "{:,.2f}".format(category.amount) }}</strong>
+                                    <span class="expense-mix-percent">{{ category.percentage }}%</span>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+
+            <div class="insight-details">
+                {% if spending_insights["items"] %}
+                    <div class="insight-grid">
+                        {% for insight in spending_insights["items"] %}
+                            <article class="insight-card {{ insight.kind }}">
+                                {% if insight.kind == "top_category" %}
+                                    <span class="insight-kicker">Largest expense category</span>
+                                    <h3>{{ insight.category }}</h3>
+                                    <p>This category accounts for the largest share of expenses in this period.</p>
+                                    <div class="insight-highlight">
+                                        <strong>KES {{ "{:,.2f}".format(insight.amount) }}</strong>
+                                        <span>{{ insight.share_percent }}% of recorded expenses</span>
+                                    </div>
+                                {% else %}
+                                    <span class="insight-kicker">
+                                        {{ "Spending increased" if insight.kind == "increase" else "Spending decreased" }}
+                                    </span>
+                                    <h3>{{ insight.category }}</h3>
+                                    <p>
+                                        {{ insight.percent_change }}%
+                                        {{ "more" if insight.kind == "increase" else "less" }}
+                                        than the comparison period.
+                                    </p>
+                                    <div class="insight-comparison">
+                                        <div>
+                                            <span>This period</span>
+                                            <strong>KES {{ "{:,.2f}".format(insight.current_amount) }}</strong>
+                                        </div>
+                                        <div>
+                                            <span>Previous</span>
+                                            <strong>KES {{ "{:,.2f}".format(insight.previous_amount) }}</strong>
+                                        </div>
+                                    </div>
+                                {% endif %}
+                            </article>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="insights-empty">
+                        <h3>No spending insights yet</h3>
+                        <p>Record expenses for this period to see category patterns.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+
     <section class="dashboard-budget-section">
         <div class="section-heading">
             <div>

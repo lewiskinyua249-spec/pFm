@@ -16,6 +16,7 @@ from app.services.transaction_service import (
     get_transaction_by_id,
     calculate_balance
 )
+from app.services.spending_insight_service import get_spending_insights
 from app.services.transaction_import_service import (
     get_staged_transaction_import,
     import_staged_transactions,
@@ -290,6 +291,143 @@ def test_dashboard_defaults_to_week_to_date_and_shows_current_budget(
     assert b"Weekly groceries" in response.data
     assert b"Groceries" in response.data
     assert b"Month-end estimate" in response.data
+
+
+def test_dashboard_compares_spending_by_category_with_previous_period(
+    app,
+    client,
+    registered_user
+):
+    with app.app_context():
+        today = date.today()
+        start_date = today - timedelta(days=5)
+        comparison_end = start_date - timedelta(days=1)
+        comparison_start = comparison_end - timedelta(days=5)
+        groceries = create_category(
+            user_id=registered_user["id"],
+            name="Groceries",
+            category_type="expense"
+        )
+        dining = create_category(
+            user_id=registered_user["id"],
+            name="Dining",
+            category_type="expense"
+        )
+        create_transaction(
+            user_id=registered_user["id"],
+            amount="100.00",
+            transaction_type="expense",
+            category_id=groceries.id,
+            transaction_date=comparison_start
+        )
+        create_transaction(
+            user_id=registered_user["id"],
+            amount="200.00",
+            transaction_type="expense",
+            category_id=groceries.id,
+            transaction_date=today
+        )
+        create_transaction(
+            user_id=registered_user["id"],
+            amount="50.00",
+            transaction_type="expense",
+            category_id=dining.id,
+            transaction_date=today
+        )
+
+    client.post(
+        "/login",
+        data={
+            "email": registered_user["email"],
+            "password": registered_user["password"]
+        }
+    )
+    response = client.get(
+        f"/?start_date={start_date.isoformat()}&end_date={today.isoformat()}"
+    )
+
+    assert response.status_code == 200
+    assert b"Smart spending insights" in response.data
+    assert comparison_start.isoformat().encode() in response.data
+    assert comparison_end.isoformat().encode() in response.data
+    assert b"Largest expense category" in response.data
+    assert b"Expense mix" in response.data
+    assert b"KES 250.00" in response.data
+    assert b"expense-donut" in response.data
+    assert b"Groceries" in response.data
+    assert b"Dining" in response.data
+    assert b"80%" in response.data
+    assert b"20%" in response.data
+    assert b"100%" in response.data
+    assert b"KES 200.00" in response.data
+
+
+def test_spending_insights_group_smaller_categories_as_other(
+    app,
+    registered_user
+):
+    with app.app_context():
+        today = date.today()
+        amounts = ("600.00", "500.00", "400.00", "300.00", "200.00", "100.00")
+        for index, amount in enumerate(amounts):
+            category = create_category(
+                user_id=registered_user["id"],
+                name=f"Category {index + 1}",
+                category_type="expense"
+            )
+            create_transaction(
+                user_id=registered_user["id"],
+                amount=amount,
+                transaction_type="expense",
+                category_id=category.id,
+                transaction_date=today
+            )
+
+        insights = get_spending_insights(
+            registered_user["id"],
+            today,
+            today
+        )
+
+    expense_mix = insights["expense_mix"]
+    assert [category["name"] for category in expense_mix] == [
+        "Category 1",
+        "Category 2",
+        "Category 3",
+        "Category 4",
+        "Other"
+    ]
+    assert expense_mix[-1]["amount"] == Decimal("300.00")
+    assert sum(
+        (Decimal(category["dasharray"].split()[0]) for category in expense_mix),
+        Decimal("0.00")
+    ) == Decimal("100.00")
+
+
+def test_dashboard_does_not_create_spending_insights_from_income_only(
+    app,
+    client,
+    registered_user
+):
+    with app.app_context():
+        create_transaction(
+            user_id=registered_user["id"],
+            amount="500.00",
+            transaction_type="income",
+            transaction_date=date.today()
+        )
+
+    client.post(
+        "/login",
+        data={
+            "email": registered_user["email"],
+            "password": registered_user["password"]
+        }
+    )
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert b"No spending insights yet" in response.data
 
 
 def test_budget_pacing_uses_month_to_date_spending_only(
@@ -1885,6 +2023,8 @@ def test_add_transaction_page_opens_for_logged_in_user(
     response = client.get("/transactions/add")
 
     assert response.status_code == 200
+    assert b"Create a new category..." in response.data
+    assert b'id="new_category_name"' in response.data
 
 
 def test_dashboard_displays_user_transaction(
@@ -1990,6 +2130,110 @@ def test_add_transaction_with_valid_category(
 
     assert saved_transaction is not None
     assert saved_transaction.category_id == category.id
+
+
+def test_add_transaction_creates_a_new_category_inline(
+    app,
+    client,
+    registered_user
+):
+    _login_route_test_user(client, registered_user)
+
+    response = client.post(
+        "/transactions/add",
+        data={
+            "amount": "450.00",
+            "type": "expense",
+            "description": "Taxi fare",
+            "category_id": "new",
+            "new_category_name": "Transport"
+        }
+    )
+
+    assert response.status_code == 302
+
+    with app.app_context():
+        category = Category.query.filter_by(
+            user_id=registered_user["id"],
+            name="Transport",
+            type="expense"
+        ).one()
+        transaction = Transaction.query.filter_by(
+            user_id=registered_user["id"],
+            description="Taxi fare"
+        ).one()
+
+        assert transaction.category_id == category.id
+
+
+def test_add_transaction_reuses_matching_inline_category(
+    app,
+    client,
+    registered_user
+):
+    _login_route_test_user(client, registered_user)
+    category = create_category(
+        user_id=registered_user["id"],
+        name="Transport",
+        category_type="expense"
+    )
+
+    response = client.post(
+        "/transactions/add",
+        data={
+            "amount": "450.00",
+            "type": "expense",
+            "description": "Taxi fare",
+            "category_id": "new",
+            "new_category_name": " transport "
+        }
+    )
+
+    assert response.status_code == 302
+
+    with app.app_context():
+        assert Category.query.filter_by(
+            user_id=registered_user["id"],
+            type="expense"
+        ).count() == 1
+        transaction = Transaction.query.filter_by(
+            user_id=registered_user["id"],
+            description="Taxi fare"
+        ).one()
+
+        assert transaction.category_id == category.id
+
+
+def test_add_transaction_requires_name_for_new_category(
+    app,
+    client,
+    registered_user
+):
+    _login_route_test_user(client, registered_user)
+
+    response = client.post(
+        "/transactions/add",
+        data={
+            "amount": "450.00",
+            "type": "expense",
+            "description": "Taxi fare",
+            "category_id": "new",
+            "new_category_name": ""
+        }
+    )
+
+    assert response.status_code == 200
+    assert b"Category name cannot be empty." in response.data
+
+    with app.app_context():
+        assert not Category.query.filter_by(
+            user_id=registered_user["id"],
+            name="Transport"
+        ).first()
+        assert not Transaction.query.filter_by(
+            user_id=registered_user["id"],
+            description="Taxi fare"
+        ).first()
 
 
 def test_add_transaction_rejects_missing_fields(

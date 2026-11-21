@@ -27,6 +27,7 @@ from flask_login import login_required, current_user
 
 from app.services.transaction_service import (
     create_transaction,
+    create_transaction_with_new_category,
     get_user_transactions,
     calculate_balance,
     get_filtered_transactions,
@@ -81,6 +82,9 @@ from app.services.savings_goal_service import (
 from app.services.report_service import (
     get_financial_report
 )
+from app.services.spending_insight_service import (
+    get_spending_insights
+)
 
 main = Blueprint("main", __name__)
 
@@ -119,6 +123,11 @@ def dashboard():
         start_date=start_date,
         end_date=end_date
     )
+    spending_insights = get_spending_insights(
+        current_user.id,
+        start_date,
+        end_date
+    )
 
     transactions = get_user_transactions(
         current_user.id,
@@ -150,6 +159,7 @@ def dashboard():
         "dashboard.html",
         user=current_user,
         summary=summary,
+        spending_insights=spending_insights,
         transactions=transactions,
         budget_pacing=budget_pacing,
         upcoming_items=upcoming_items,
@@ -360,6 +370,10 @@ def add_transaction():
         transaction_type = request.form.get("type", "").strip()
         description = request.form.get("description", "").strip()
         category_id = request.form.get("category_id", "").strip()
+        new_category_name = request.form.get(
+            "new_category_name",
+            ""
+        ).strip()
 
         if not amount or not transaction_type:
             flash("Amount and transaction type are required.", "error")
@@ -391,7 +405,9 @@ def add_transaction():
                 categories=categories
             )
 
-        if category_id:
+        create_new_category = category_id == "new"
+
+        if category_id and not create_new_category:
             try:
                 category_id = int(category_id)
             except ValueError:
@@ -401,10 +417,10 @@ def add_transaction():
                     "add_transaction.html",
                     categories=categories
                 )
-        else:
+        elif not create_new_category:
             category_id = None
 
-        if category_id is not None:
+        if category_id is not None and not create_new_category:
             from app.models import Category
 
             category = Category.query.filter_by(
@@ -422,13 +438,22 @@ def add_transaction():
                 )
 
         try:
-            create_transaction(
-                user_id=current_user.id,
-                amount=amount,
-                transaction_type=transaction_type,
-                description=description,
-                category_id=category_id
-            )
+            if create_new_category:
+                create_transaction_with_new_category(
+                    user_id=current_user.id,
+                    amount=amount,
+                    transaction_type=transaction_type,
+                    description=description,
+                    category_name=new_category_name
+                )
+            else:
+                create_transaction(
+                    user_id=current_user.id,
+                    amount=amount,
+                    transaction_type=transaction_type,
+                    description=description,
+                    category_id=category_id
+                )
 
             flash("Transaction added successfully.", "success")
 
@@ -438,6 +463,10 @@ def add_transaction():
             flash(str(error), "error")
 
         except Exception:
+            current_app.logger.exception(
+                "Failed to add transaction for user %s",
+                current_user.id
+            )
             flash("An unexpected error occurred.", "error")
 
     return render_template(

@@ -3,6 +3,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
     const typeSelect = document.getElementById("type");
     const categorySelect = document.getElementById("category_id");
+    const newCategoryField = document.getElementById("new-category-field");
+    const newCategoryName = document.getElementById("new_category_name");
 
     if (!typeSelect || !categorySelect) {
         return;
@@ -40,9 +42,27 @@ document.addEventListener("DOMContentLoaded", function () {
         ) {
             categorySelect.value = "";
         }
+
+        updateNewCategoryField();
+    }
+
+    function updateNewCategoryField() {
+        if (!newCategoryField || !newCategoryName) {
+            return;
+        }
+
+        const creatingCategory = categorySelect.value === "new";
+        newCategoryField.hidden = !creatingCategory;
+        newCategoryName.disabled = !creatingCategory;
+        newCategoryName.required = creatingCategory;
+
+        if (!creatingCategory) {
+            newCategoryName.value = "";
+        }
     }
 
     typeSelect.addEventListener("change", filterCategories);
+    categorySelect.addEventListener("change", updateNewCategoryField);
 
     filterCategories();
 

@@ -6,6 +6,7 @@ from sqlalchemy import func, case
 
 from app import db
 from app.models import Transaction, Category
+from app.services.category_service import validate_category_name
 
 
 MAX_AMOUNT = Decimal("9999999999.99")
@@ -152,6 +153,61 @@ def create_transaction(
         raise
 
     return transaction
+
+
+def create_transaction_with_new_category(
+    user_id,
+    amount,
+    transaction_type,
+    description,
+    category_name,
+    transaction_date=None
+):
+
+    amount = validate_amount(amount)
+    transaction_type = validate_transaction_type(transaction_type)
+    description = validate_description(description)
+    transaction_date = validate_transaction_date(transaction_date)
+    category_name = validate_category_name(category_name)
+
+    category = Category.query.filter(
+        Category.user_id == user_id,
+        func.lower(Category.name) == category_name.lower(),
+        Category.type == transaction_type
+    ).first()
+
+    if category:
+        return create_transaction(
+            user_id=user_id,
+            amount=amount,
+            transaction_type=transaction_type,
+            description=description,
+            category_id=category.id,
+            transaction_date=transaction_date
+        )
+
+    category = Category(
+        user_id=user_id,
+        name=category_name,
+        type=transaction_type
+    )
+
+    try:
+        db.session.add(category)
+        db.session.flush()
+
+        return create_transaction(
+            user_id=user_id,
+            amount=amount,
+            transaction_type=transaction_type,
+            description=description,
+            category_id=category.id,
+            transaction_date=transaction_date
+        )
+
+    except Exception:
+        db.session.rollback()
+        raise
 
 
 def get_user_transactions(

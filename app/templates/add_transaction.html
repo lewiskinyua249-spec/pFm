@@ -41,8 +41,18 @@
                             {{ category.name }} ({{ category.type|capitalize }})
                         </option>
                     {% endfor %}
+                    <option value="new" {% if request.form.get("category_id") == "new" %}selected{% endif %}>
+                        Create a new category...
+                    </option>
                 </select>
-                <p class="field-hint">Categories follow the transaction type you choose.</p>
+                <p class="field-hint">Choose an existing category or create one here. Categories follow the transaction type.</p>
+            </div>
+
+            <div class="field field-wide" id="new-category-field">
+                <label for="new_category_name">New category name</label>
+                <input type="text" id="new_category_name" name="new_category_name"
+                       maxlength="80" autocomplete="off"
+                       value="{{ request.form.get('new_category_name', '') }}">
             </div>
 
             <div class="field field-wide">
