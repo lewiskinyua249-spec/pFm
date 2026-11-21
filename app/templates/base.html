@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#f5f7f4">
     <title>{% block title %}Personal Finance{% endblock %} | Personal Finance Manager</title>
+    <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     {% block head %}{% endblock %}
 </head>
@@ -75,12 +76,16 @@
             <div class="workspace">
                 <header class="topbar">
                     <p class="topbar-note">A little more clarity, every day.</p>
-                    <a class="button button-primary topbar-action"
-                       aria-label="Add transaction"
-                       href="{{ url_for('main.add_transaction') }}">
-                        <span aria-hidden="true">+</span>
-                        <span class="topbar-action-label">Add transaction</span>
-                    </a>
+                    <div class="topbar-actions">
+                        <button class="theme-toggle" type="button" data-theme-toggle
+                                aria-pressed="false" aria-label="Switch to dark mode" hidden>Dark mode</button>
+                        <a class="button button-primary topbar-action"
+                           aria-label="Add transaction"
+                           href="{{ url_for('main.add_transaction') }}">
+                            <span aria-hidden="true">+</span>
+                            <span class="topbar-action-label">Add transaction</span>
+                        </a>
+                    </div>
                 </header>
 
                 <main class="page-content" id="main-content">
@@ -117,6 +122,10 @@
         </div>
     {% else %}
         <main class="auth-shell" id="main-content">
+            <div class="auth-toolbar">
+                <button class="theme-toggle" type="button" data-theme-toggle
+                        aria-pressed="false" aria-label="Switch to dark mode" hidden>Dark mode</button>
+            </div>
             <a class="brand auth-brand" href="{{ url_for('auth.login') }}">
                 <span class="brand-mark" aria-hidden="true">P</span>
                 <span class="brand-name">Personal Finance</span>

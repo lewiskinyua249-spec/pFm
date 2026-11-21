@@ -149,6 +149,15 @@ def test_home_redirects_to_login(client):
     assert "/login" in response.location
 
 
+def test_auth_pages_include_theme_toggle(client):
+    for path in ("/login", "/register"):
+        response = client.get(path)
+
+        assert response.status_code == 200
+        assert b'data-theme-toggle' in response.data
+        assert b'js/theme.js' in response.data
+
+
 def test_user_can_register(client):
     response = client.post(
         "/register",
@@ -193,6 +202,7 @@ def test_user_can_login(client, registered_user):
 
     assert response.status_code == 200
     assert b"Dashboard" in response.data
+    assert b'data-theme-toggle' in response.data
 
 
 def test_dashboard_filters_summary_by_requested_dates(
@@ -259,6 +269,7 @@ def test_dashboard_defaults_to_week_to_date_and_shows_current_budget(
             user_id=registered_user["id"],
             amount="100.00",
             transaction_type="expense",
+            description="Weekly groceries",
             category_id=category.id,
             transaction_date=today
         )
@@ -275,6 +286,8 @@ def test_dashboard_defaults_to_week_to_date_and_shows_current_budget(
     assert f'value="{week_start.isoformat()}"'.encode() in response.data
     assert b"Weekly check-in" in response.data
     assert b"Budget pace" in response.data
+    assert b'dashboard-activity-list' in response.data
+    assert b"Weekly groceries" in response.data
     assert b"Groceries" in response.data
     assert b"Month-end estimate" in response.data
 
