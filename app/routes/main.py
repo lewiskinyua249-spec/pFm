@@ -173,6 +173,12 @@ def dashboard():
     )
 
 
+@main.route("/settings")
+@login_required
+def settings():
+    return render_template("settings.html")
+
+
 @main.route("/recurring", methods=["GET", "POST"])
 @login_required
 def recurring_items():

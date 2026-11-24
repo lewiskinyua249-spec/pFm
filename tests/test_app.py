@@ -165,6 +165,34 @@ def test_auth_pages_include_theme_toggle(client):
         assert b'js/theme.js' in response.data
 
 
+def test_settings_page_requires_login(client):
+    response = client.get("/settings")
+
+    assert response.status_code == 302
+    assert "/login" in response.location
+
+
+def test_settings_page_shows_existing_account_and_preferences(
+    client,
+    registered_user
+):
+    _login_route_test_user(client, registered_user)
+
+    response = client.get("/settings")
+
+    assert response.status_code == 200
+    assert b"Settings" in response.data
+    assert registered_user["email"].encode() in response.data
+    assert b"Profile editing is not currently available" in response.data
+    assert b"KES" in response.data
+    assert b"data-theme-toggle" in response.data
+    assert b"/export/transactions" in response.data
+    assert b"/export/backup" in response.data
+    assert b"Password changes and session management are not currently supported" in response.data
+    assert b"Scheduled Transactions" in response.data
+    assert b"Reports &amp; Insights" in response.data
+
+
 def test_user_can_register(client):
     response = client.post(
         "/register",

@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+
+{% block title %}Settings{% endblock %}
+{% block page_title %}Settings{% endblock %}
+{% block page_description %}
+    <p class="page-description">Manage your account and the preferences currently supported by the app.</p>
+{% endblock %}
+
+{% block content %}
+    <div class="settings-grid">
+        <section class="settings-card">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">Profile &amp; account</p>
+                    <h2>Your account</h2>
+                </div>
+            </div>
+            <dl class="settings-details">
+                <div>
+                    <dt>Username</dt>
+                    <dd>{{ current_user.username }}</dd>
+                </div>
+                <div>
+                    <dt>Email address</dt>
+                    <dd>{{ current_user.email }}</dd>
+                </div>
+                <div>
+                    <dt>Member since</dt>
+                    <dd>{{ current_user.created_at.strftime("%d %B %Y") }}</dd>
+                </div>
+            </dl>
+            <p class="field-hint">Profile editing is not currently available.</p>
+        </section>
+
+        <section class="settings-card">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">Appearance</p>
+                    <h2>Theme</h2>
+                </div>
+            </div>
+            <p>Choose the display that feels comfortable. Your selection is saved in this browser.</p>
+            <button class="button button-secondary settings-theme-toggle" type="button"
+                    data-theme-toggle aria-pressed="false"
+                    aria-label="Switch to dark mode" hidden>Dark mode</button>
+        </section>
+
+        <section class="settings-card">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">Financial preferences</p>
+                    <h2>Reporting currency</h2>
+                </div>
+            </div>
+            <div class="settings-preference">
+                <span>Base currency</span>
+                <strong>KES — Kenyan Shilling</strong>
+            </div>
+            <p class="field-hint">Balances, budgets, and reports are calculated in KES. Individual transactions can be entered in supported currencies.</p>
+        </section>
+
+        <section class="settings-card">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">Data management</p>
+                    <h2>Your financial data</h2>
+                </div>
+            </div>
+            <p>Export your transaction ledger or download a backup of your account data.</p>
+            <div class="settings-actions">
+                <a class="button button-secondary" href="{{ url_for('main.export_transactions') }}">Export transactions</a>
+                <a class="button button-secondary" href="{{ url_for('main.download_personal_backup') }}">Download backup</a>
+            </div>
+        </section>
+
+        <section class="settings-card">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">Security</p>
+                    <h2>Sign-in and sessions</h2>
+                </div>
+            </div>
+            <p>Your finance pages require an authenticated account. Password changes and session management are not currently supported.</p>
+            <form method="POST" action="{{ url_for('auth.logout') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="button-secondary" type="submit">Log out</button>
+            </form>
+        </section>
+    </div>
+{% endblock %}

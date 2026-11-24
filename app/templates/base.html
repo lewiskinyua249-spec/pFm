@@ -19,49 +19,65 @@
                     <span class="brand-name">Personal Finance</span>
                 </a>
 
-                <p class="nav-label">Workspace</p>
                 <nav class="primary-nav" aria-label="Main navigation">
-                    <a class="nav-link {% if request.endpoint == 'main.dashboard' %}is-active{% endif %}"
-                       href="{{ url_for('main.dashboard') }}">
-                        <span class="nav-icon" aria-hidden="true">⌂</span>
-                        Dashboard
-                    </a>
-                    <a class="nav-link {% if request.endpoint in ['main.transactions', 'main.add_transaction', 'main.edit_transaction'] %}is-active{% endif %}"
-                       href="{{ url_for('main.transactions') }}">
-                        <span class="nav-icon" aria-hidden="true">↔</span>
-                        Transactions
-                    </a>
-                    <a class="nav-link {% if request.endpoint in ['main.budgets', 'main.edit_budget'] %}is-active{% endif %}"
-                       href="{{ url_for('main.budgets') }}">
-                        <span class="nav-icon" aria-hidden="true">▤</span>
-                        Budgets
-                    </a>
-                    <a class="nav-link {% if request.endpoint in ['main.recurring_items', 'main.edit_recurring_item'] %}is-active{% endif %}"
-                       href="{{ url_for('main.recurring_items') }}">
-                        <span class="nav-icon" aria-hidden="true">⟳</span>
-                        Recurring
-                    </a>
-                    <a class="nav-link {% if request.endpoint in ['main.savings_goals', 'main.add_savings_progress'] %}is-active{% endif %}"
-                       href="{{ url_for('main.savings_goals') }}">
-                        <span class="nav-icon" aria-hidden="true">◎</span>
-                        Savings Goals
-                    </a>
-                    <a class="nav-link {% if request.endpoint == 'main.reports' %}is-active{% endif %}"
-                       href="{{ url_for('main.reports') }}">
-                        <span class="nav-icon" aria-hidden="true">▥</span>
-                        Reports
-                    </a>
-                    <a class="nav-link {% if request.endpoint in ['main.categories', 'main.edit_category'] %}is-active{% endif %}"
-                       href="{{ url_for('main.categories') }}">
-                        <span class="nav-icon" aria-hidden="true">▦</span>
-                        Categories
-                    </a>
+                    <div class="nav-group">
+                        <span class="nav-group-label">Overview</span>
+                        <a class="nav-link {% if request.endpoint == 'main.dashboard' %}is-active{% endif %}"
+                           href="{{ url_for('main.dashboard') }}">
+                            <span class="nav-icon" aria-hidden="true">⌂</span>
+                            Dashboard
+                        </a>
+                    </div>
+                    <div class="nav-group">
+                        <span class="nav-group-label">Money management</span>
+                        <a class="nav-link {% if request.endpoint in ['main.transactions', 'main.add_transaction', 'main.edit_transaction', 'main.import_transactions'] %}is-active{% endif %}"
+                           href="{{ url_for('main.transactions') }}">
+                            <span class="nav-icon" aria-hidden="true">↔</span>
+                            Transactions
+                        </a>
+                        <a class="nav-link {% if request.endpoint in ['main.recurring_items', 'main.edit_recurring_item'] %}is-active{% endif %}"
+                           href="{{ url_for('main.recurring_items') }}">
+                            <span class="nav-icon" aria-hidden="true">⟳</span>
+                            Scheduled Transactions
+                        </a>
+                        <a class="nav-link {% if request.endpoint in ['main.categories', 'main.edit_category'] %}is-active{% endif %}"
+                           href="{{ url_for('main.categories') }}">
+                            <span class="nav-icon" aria-hidden="true">▦</span>
+                            Categories
+                        </a>
+                    </div>
+                    <div class="nav-group">
+                        <span class="nav-group-label">Financial planning</span>
+                        <a class="nav-link {% if request.endpoint in ['main.budgets', 'main.edit_budget'] %}is-active{% endif %}"
+                           href="{{ url_for('main.budgets') }}">
+                            <span class="nav-icon" aria-hidden="true">▤</span>
+                            Budgets
+                        </a>
+                        <a class="nav-link {% if request.endpoint in ['main.savings_goals', 'main.add_savings_progress'] %}is-active{% endif %}"
+                           href="{{ url_for('main.savings_goals') }}">
+                            <span class="nav-icon" aria-hidden="true">◎</span>
+                            Savings Goals
+                        </a>
+                    </div>
+                    <div class="nav-group">
+                        <span class="nav-group-label">Analytics</span>
+                        <a class="nav-link {% if request.endpoint == 'main.reports' %}is-active{% endif %}"
+                           href="{{ url_for('main.reports') }}">
+                            <span class="nav-icon" aria-hidden="true">▥</span>
+                            Reports &amp; Insights
+                        </a>
+                    </div>
+                    <div class="nav-group">
+                        <span class="nav-group-label">Preferences</span>
+                        <a class="nav-link {% if request.endpoint == 'main.settings' %}is-active{% endif %}"
+                           href="{{ url_for('main.settings') }}">
+                            <span class="nav-icon" aria-hidden="true">⚙</span>
+                            Settings
+                        </a>
+                    </div>
                 </nav>
 
                 <div class="sidebar-bottom">
-                    <p class="nav-label">Your data</p>
-                    <a class="utility-link" href="{{ url_for('main.export_transactions') }}">Export transactions</a>
-                    <a class="utility-link" href="{{ url_for('main.download_personal_backup') }}">Download backup</a>
                     <div class="profile-row">
                         <span class="avatar" aria-hidden="true">{{ current_user.username[:1]|upper }}</span>
                         <span class="profile-name">{{ current_user.username }}</span>

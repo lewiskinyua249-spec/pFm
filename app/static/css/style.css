@@ -146,6 +146,24 @@ textarea:focus-visible {
     gap: 5px;
 }
 
+.nav-group {
+    display: grid;
+    gap: 4px;
+}
+
+.nav-group + .nav-group {
+    margin-top: 15px;
+}
+
+.nav-group-label {
+    margin: 0 0 4px 12px;
+    color: #9aa39d;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.1px;
+    text-transform: uppercase;
+}
+
 .nav-link {
     display: flex;
     min-height: 46px;
@@ -2212,6 +2230,86 @@ small {
     text-align: center;
 }
 
+.settings-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.settings-card {
+    min-width: 0;
+    margin: 0;
+    padding: 22px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--surface);
+    box-shadow: var(--shadow);
+}
+
+.settings-card .section-heading {
+    margin-bottom: 12px;
+}
+
+.settings-card .section-heading h2 {
+    margin-bottom: 0;
+}
+
+.settings-card > p {
+    margin: 0 0 16px;
+    color: var(--text-secondary, var(--muted));
+    font-size: 13px;
+}
+
+.settings-details {
+    display: grid;
+    gap: 0;
+    margin: 0;
+}
+
+.settings-details > div,
+.settings-preference {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 11px 0;
+    border-bottom: 1px solid var(--line);
+}
+
+.settings-details > div:last-child {
+    border-bottom: 0;
+}
+
+.settings-details dt,
+.settings-preference span {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.settings-details dd,
+.settings-preference strong {
+    margin: 0;
+    color: var(--ink);
+    font-size: 13px;
+    font-weight: 650;
+    text-align: right;
+    overflow-wrap: anywhere;
+}
+
+.settings-card .field-hint {
+    margin: 12px 0 0;
+}
+
+.settings-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.settings-theme-toggle {
+    margin-top: 2px;
+}
+
 @media (max-width: 1050px) {
     .sidebar {
         width: 218px;
@@ -2283,6 +2381,10 @@ small {
         display: none;
     }
 
+    .nav-group-label {
+        display: none;
+    }
+
     .sidebar-bottom {
         display: block;
         margin-top: 0;
@@ -2320,6 +2422,14 @@ small {
 
     .primary-nav::-webkit-scrollbar {
         display: none;
+    }
+
+    .nav-group {
+        display: contents;
+    }
+
+    .nav-group + .nav-group {
+        margin-top: 0;
     }
 
     .nav-link {
@@ -2371,7 +2481,8 @@ small {
     }
 
     .category-columns,
-    .report-columns {
+    .report-columns,
+    .settings-grid {
         grid-template-columns: 1fr;
     }
 
@@ -2453,6 +2564,15 @@ small {
     .period-form,
     .form-grid {
         grid-template-columns: 1fr;
+    }
+
+    .settings-card {
+        padding: 18px;
+    }
+
+    .settings-actions {
+        align-items: stretch;
+        flex-direction: column;
     }
 
     .dashboard-primary-grid .period-form {
@@ -2811,6 +2931,11 @@ html[data-theme="dark"] .balance-icon {
 html[data-theme="dark"] .count-icon {
     background: #2c3542;
     color: #b0bfd8;
+}
+
+html[data-theme="dark"] .settings-card {
+    border-color: var(--line);
+    background: var(--surface);
 }
 
 @media (max-width: 760px) {
