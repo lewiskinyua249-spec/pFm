@@ -203,6 +203,10 @@ def handle_recurring_item(item_id, user_id, action, handled_date=None):
             date=handled_date,
             type=validate_transaction_type(item.type),
             amount=validate_amount(item.amount),
+            original_amount=validate_amount(item.amount),
+            currency="KES",
+            exchange_rate=1,
+            exchange_rate_date=handled_date,
             description=validate_description(item.name),
             category_id=category_id
         )

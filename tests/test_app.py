@@ -1,6 +1,7 @@
 
 import csv
 import io
+import json
 import re
 import calendar
 from decimal import Decimal
@@ -9,6 +10,11 @@ import pytest
 
 from app import create_app, db
 from app.models import User, SavingsGoal, Transaction, RecurringItem
+from app.services import (
+    exchange_rate_service,
+    transaction_import_service,
+    transaction_service
+)
 
 from app.services.transaction_service import (
     create_transaction,
@@ -1608,7 +1614,7 @@ def test_json_backup_contains_only_users_records(
         )
 
         assert backup["application"] == "Personal Finance Manager"
-        assert backup["backup_version"] == 2
+        assert backup["backup_version"] == 3
 
         assert len(backup["transactions"]) == 1
 
@@ -2025,6 +2031,62 @@ def test_add_transaction_page_opens_for_logged_in_user(
     assert response.status_code == 200
     assert b"Create a new category..." in response.data
     assert b'id="new_category_name"' in response.data
+
+
+def test_add_transaction_page_offers_multiple_currencies(
+    client,
+    registered_user
+):
+    _login_route_test_user(client, registered_user)
+
+    response = client.get("/transactions/add")
+
+    assert response.status_code == 200
+    assert b"USD" in response.data
+    assert b"US Dollar" in response.data
+    assert b"historical reference rates" in response.data
+
+
+def test_add_foreign_currency_transaction_shows_kes_equivalent(
+    app,
+    client,
+    registered_user,
+    monkeypatch
+):
+    _login_route_test_user(client, registered_user)
+    observed_date = date(2026, 11, 20)
+    monkeypatch.setattr(
+        transaction_service,
+        "get_exchange_rate",
+        lambda source, target, requested_date: (
+            Decimal("130.00"),
+            observed_date
+        )
+    )
+
+    response = client.post(
+        "/transactions/add",
+        data={
+            "amount": "12.50",
+            "currency": "USD",
+            "date": "2026-11-22",
+            "type": "expense",
+            "description": "Foreign purchase",
+            "category_id": ""
+        }
+    )
+
+    assert response.status_code == 302
+    with app.app_context():
+        transaction = get_user_transactions(registered_user["id"])[0]
+        assert transaction.original_amount == Decimal("12.50")
+        assert transaction.currency == "USD"
+        assert transaction.amount == Decimal("1625.00")
+        assert transaction.exchange_rate_date == observed_date
+
+    list_response = client.get("/transactions")
+    assert b"USD 12.50" in list_response.data
+    assert b"KES 1,625.00" in list_response.data
 
 
 def test_dashboard_displays_user_transaction(
@@ -4011,7 +4073,11 @@ def test_csv_export_contains_expected_headers(
         "Type",
         "Category",
         "Description",
-        "Amount"
+        "Amount",
+        "Currency",
+        "Amount (KES)",
+        "Exchange Rate",
+        "Exchange Rate Date"
     ]
 
 
@@ -4669,6 +4735,84 @@ def test_transaction_service_creates_expense(app, registered_user):
         assert transaction.id is not None
         assert transaction.amount == Decimal("1500.50")
         assert transaction.type == "expense"
+
+
+def test_transaction_service_converts_foreign_amount_to_kes(
+    app,
+    registered_user,
+    monkeypatch
+):
+    observed_date = date(2026, 11, 20)
+    monkeypatch.setattr(
+        transaction_service,
+        "get_exchange_rate",
+        lambda source, target, requested_date: (
+            Decimal("129.975"),
+            observed_date
+        )
+    )
+
+    with app.app_context():
+        transaction = create_transaction(
+            user_id=registered_user["id"],
+            amount="10.00",
+            transaction_type="expense",
+            transaction_date=date(2026, 11, 22),
+            currency="USD"
+        )
+        totals = calculate_balance(registered_user["id"])
+
+        assert transaction.original_amount == Decimal("10.00")
+        assert transaction.currency == "USD"
+        assert transaction.exchange_rate == Decimal("129.975")
+        assert transaction.exchange_rate_date == observed_date
+        assert transaction.amount == Decimal("1299.75")
+        assert totals["expenses"] == Decimal("1299.75")
+
+
+def test_transaction_service_rejects_unsupported_currency(
+    app,
+    registered_user,
+    monkeypatch
+):
+    monkeypatch.setattr(
+        transaction_service,
+        "get_exchange_rate",
+        lambda *args: pytest.fail("Rate lookup should not run")
+    )
+
+    with app.app_context(), pytest.raises(ValueError):
+        create_transaction(
+            user_id=registered_user["id"],
+            amount="10.00",
+            transaction_type="expense",
+            currency="XYZ"
+        )
+
+
+def test_exchange_rate_uses_latest_available_rate_on_or_before_date(
+    monkeypatch
+):
+    results = [
+        {"date": "2026-11-20", "rates": {"KES": "129.97"}},
+        {"date": "2026-11-23", "rates": {"KES": "130.01"}}
+    ]
+    monkeypatch.setattr(
+        exchange_rate_service,
+        "urlopen",
+        lambda request_url, timeout: io.BytesIO(
+            json.dumps(results).encode("utf-8")
+        )
+    )
+
+    rate, rate_date = exchange_rate_service.get_exchange_rate(
+        "USD",
+        "KES",
+        date(2026, 11, 22)
+    )
+
+    assert rate == Decimal("129.97")
+    assert rate_date == date(2026, 11, 20)
 
 
 def test_transaction_service_rejects_zero_amount(
@@ -5427,6 +5571,10 @@ def _create_budget_test_transaction(
     transaction = Transaction(
         user_id=user_id,
         amount=Decimal(str(amount)),
+        original_amount=Decimal(str(amount)),
+        currency="KES",
+        exchange_rate=Decimal("1"),
+        exchange_rate_date=transaction_date,
         type=transaction_type,
         date=transaction_date,
         category_id=category_id,
@@ -6941,6 +7089,10 @@ def _create_report_transaction(
     transaction = Transaction(
         user_id=user_id,
         amount=Decimal(str(amount)),
+        original_amount=Decimal(str(amount)),
+        currency="KES",
+        exchange_rate=Decimal("1"),
+        exchange_rate_date=transaction_date,
         type=transaction_type,
         date=transaction_date,
         category_id=category_id,
@@ -7915,14 +8067,25 @@ def _create_export_transaction(
     transaction_type="expense",
     description="Test transaction",
     transaction_date=None,
-    category_id=None
+    category_id=None,
+    original_amount=None,
+    currency="KES",
+    exchange_rate="1.0000000000",
+    exchange_rate_date=None
 ):
+    transaction_date = transaction_date or date(2026, 1, 15)
     transaction = Transaction(
         user_id=user_id,
         amount=Decimal(amount),
+        original_amount=Decimal(
+            original_amount if original_amount is not None else amount
+        ),
+        currency=currency,
+        exchange_rate=Decimal(exchange_rate),
+        exchange_rate_date=exchange_rate_date or transaction_date,
         type=transaction_type,
         description=description,
-        date=transaction_date or date(2026, 1, 15),
+        date=transaction_date,
         category_id=category_id
     )
     db.session.add(transaction)
@@ -8151,7 +8314,11 @@ def test_generate_transactions_csv_has_correct_headers(
             "Type",
             "Category",
             "Description",
-            "Amount"
+            "Amount",
+            "Currency",
+            "Amount (KES)",
+            "Exchange Rate",
+            "Exchange Rate Date"
         ]
 
 
@@ -8177,7 +8344,11 @@ def test_generate_transactions_csv_exports_transaction(
             "expense",
             "Uncategorized",
             "Groceries",
-            "250.50"
+            "250.50",
+            "KES",
+            "250.50",
+            "1.0000000000",
+            "2026-01-15"
         ]
 
 
@@ -8290,7 +8461,7 @@ def test_generate_personal_backup_has_required_metadata(
         )
 
         assert backup["application"] == "Personal Finance Manager"
-        assert backup["backup_version"] == 2
+        assert backup["backup_version"] == 3
         assert backup["user_id"] == registered_user["id"]
         assert "backup_date" in backup
 
@@ -8420,7 +8591,7 @@ def test_generate_personal_backup_exports_recurring_items(
 
         backup = generate_personal_backup(registered_user["id"])
 
-        assert backup["backup_version"] == 2
+        assert backup["backup_version"] == 3
         assert len(backup["recurring_items"]) == 1
         assert backup["recurring_items"][0] == {
             "id": item.id,
@@ -8645,6 +8816,78 @@ def test_transaction_csv_preview_accepts_common_headers_and_kes_amounts(
 
         assert preview["ready_count"] == 1
         assert preview["rows"][0]["amount"] == "1250.00"
+
+
+def test_transaction_csv_import_preserves_foreign_currency_details(
+    app,
+    registered_user,
+    monkeypatch
+):
+    observed_date = date(2026, 11, 20)
+    rate_lookups = []
+
+    def get_month_rates(source, target, start_date, end_date):
+        rate_lookups.append((source, target, start_date, end_date))
+        return [(observed_date, Decimal("130.00"))]
+
+    monkeypatch.setattr(
+        transaction_import_service,
+        "get_exchange_rates",
+        get_month_rates
+    )
+
+    with app.app_context():
+        category = create_category(
+            user_id=registered_user["id"],
+            name="Travel",
+            category_type="expense"
+        )
+        preview = preview_transaction_csv(
+            registered_user["id"],
+            (
+                "Date,Type,Amount,Currency,Category\n"
+                "2026-11-22,expense,10.00,USD,Travel\n"
+                "2026-11-22,expense,5.00,USD,Travel\n"
+            ).encode("utf-8")
+        )
+        assert preview["ready_count"] == 2
+        assert preview["rows"][0]["amount"] == "1300.00"
+        assert preview["rows"][0]["original_amount"] == "10.00"
+        assert preview["rows"][0]["currency"] == "USD"
+        assert len(rate_lookups) == 1
+
+        imported_count, duplicate_count = import_staged_transactions(
+            registered_user["id"],
+            preview["rows"]
+        )
+        transactions = get_user_transactions(registered_user["id"])
+        assert imported_count == 2
+        assert duplicate_count == 0
+        assert {item.original_amount for item in transactions} == {
+            Decimal("10.00"),
+            Decimal("5.00")
+        }
+        assert all(item.currency == "USD" for item in transactions)
+        assert all(
+            item.exchange_rate_date == observed_date
+            for item in transactions
+        )
+
+        exported = generate_transactions_csv(registered_user["id"])
+        reimported_preview = preview_transaction_csv(
+            registered_user["id"],
+            exported.encode("utf-8")
+        )
+
+    assert reimported_preview["duplicate_count"] == 2
+    assert all(
+        row["currency"] == "USD"
+        for row in reimported_preview["rows"]
+    )
+    assert {
+        row["original_amount"]
+        for row in reimported_preview["rows"]
+    } == {"10.00", "5.00"}
 
 
 def test_transaction_csv_import_route_previews_then_confirms(

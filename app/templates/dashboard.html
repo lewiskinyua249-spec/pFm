@@ -78,8 +78,13 @@
                             <div class="dashboard-activity-meta">
                                 <span class="type-badge {{ transaction.type }}">{{ transaction.type|capitalize }}</span>
                                 <strong class="dashboard-activity-amount {{ transaction.type }}">
-                                    KES {{ "{:,.2f}".format(transaction.amount) }}
+                                    {{ transaction.currency }} {{ "{:,.2f}".format(transaction.original_amount) }}
                                 </strong>
+                                {% if transaction.currency != "KES" %}
+                                    <span class="amount-base-currency">
+                                        KES {{ "{:,.2f}".format(transaction.amount) }}
+                                    </span>
+                                {% endif %}
                             </div>
                         </div>
                     {% endfor %}

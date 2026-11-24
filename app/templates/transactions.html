@@ -87,7 +87,19 @@
                                 <td class="transaction-description">{{ transaction.description or "No description" }}</td>
                                 <td>{{ transaction.category.name if transaction.category else "Uncategorized" }}</td>
                                 <td><span class="type-badge {{ transaction.type }}">{{ transaction.type|title }}</span></td>
-                                <td class="amount-cell {{ transaction.type }}">KES {{ "{:,.2f}".format(transaction.amount) }}</td>
+                                <td class="amount-cell {{ transaction.type }}">
+                                    {{ transaction.currency }} {{ "{:,.2f}".format(transaction.original_amount) }}
+                                    {% if transaction.currency != "KES" %}
+                                        <span class="amount-base-currency">
+                                            KES {{ "{:,.2f}".format(transaction.amount) }}
+                                        </span>
+                                        <span class="amount-base-currency">
+                                            Rate: 1 {{ transaction.currency }} =
+                                            KES {{ "{:,.4f}".format(transaction.exchange_rate) }}
+                                            ({{ transaction.exchange_rate_date.strftime("%d %b %Y") }})
+                                        </span>
+                                    {% endif %}
+                                </td>
                                 <td class="table-actions">
                                     <a href="{{ url_for('main.edit_transaction', transaction_id=transaction.id) }}">Edit</a>
                                     <form method="POST"

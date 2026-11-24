@@ -15,9 +15,9 @@
             </div>
         </div>
         <p class="import-guidance">
-            Use columns <strong>Date, Type, Amount</strong>; Category and Description are optional.
-            Dates should use YYYY-MM-DD, types should be income or expense, and amounts should be positive
-            (for example 1250.00 or KES 1,250.00).
+            Use columns <strong>Date, Type, Amount</strong>; Currency, Category, and Description are optional.
+            Dates should use YYYY-MM-DD, types should be income or expense, and amounts should be positive.
+            Foreign-currency amounts are converted to KES using historical rates.
             Category names must match your existing categories. Files are limited to 2 MB and 1,000 transactions.
         </p>
         <form class="import-upload-form" method="POST"
@@ -70,7 +70,18 @@
                                 <td>{{ row.description or "—" }}</td>
                                 <td>{{ row.category or "Uncategorized" }}</td>
                                 <td>{{ row.type|title if row.type else "—" }}</td>
-                                <td>{% if row.amount_display %}KES {{ row.amount_display }}{% else %}—{% endif %}</td>
+                                <td>
+                                    {% if row.original_amount_display %}
+                                        {{ row.currency }} {{ row.original_amount_display }}
+                                        {% if row.currency != "KES" and row.amount_display %}
+                                            <span class="amount-base-currency">
+                                                KES {{ row.amount_display }}
+                                            </span>
+                                        {% endif %}
+                                    {% else %}
+                                        —
+                                    {% endif %}
+                                </td>
                                 <td>
                                     {% if row.status == "ready" %}
                                         <span class="import-row-status ready">Ready</span>

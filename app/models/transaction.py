@@ -16,6 +16,14 @@ class Transaction(db.Model):
             name="ck_transaction_positive_amount"
         ),
         CheckConstraint(
+            "original_amount > 0",
+            name="ck_transaction_positive_original_amount"
+        ),
+        CheckConstraint(
+            "exchange_rate > 0",
+            name="ck_transaction_positive_exchange_rate"
+        ),
+        CheckConstraint(
             "type IN ('income', 'expense')",
             name="ck_transaction_valid_type"
         ),
@@ -28,6 +36,28 @@ class Transaction(db.Model):
 
     amount = db.Column(
         db.Numeric(12, 2),
+        nullable=False
+    )
+
+    original_amount = db.Column(
+        db.Numeric(12, 2),
+        nullable=False
+    )
+
+    currency = db.Column(
+        db.String(3),
+        nullable=False,
+        default="KES"
+    )
+
+    exchange_rate = db.Column(
+        db.Numeric(20, 10),
+        nullable=False,
+        default=1
+    )
+
+    exchange_rate_date = db.Column(
+        db.Date,
         nullable=False
     )
 

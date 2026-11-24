@@ -1,12 +1,17 @@
 
 from datetime import date, datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 from sqlalchemy import func, case
 
 from app import db
 from app.models import Transaction, Category
 from app.services.category_service import validate_category_name
+from app.services.exchange_rate_service import (
+    BASE_CURRENCY,
+    get_exchange_rate,
+    validate_currency
+)
 
 
 MAX_AMOUNT = Decimal("9999999999.99")
@@ -83,6 +88,26 @@ def validate_transaction_date(transaction_date):
         raise ValueError("Enter a valid transaction date.")
 
 
+def convert_transaction_amount(amount, currency, transaction_date):
+    currency = validate_currency(currency)
+    if currency == BASE_CURRENCY:
+        rate = Decimal("1")
+        rate_date = transaction_date
+    else:
+        rate, rate_date = get_exchange_rate(
+            currency,
+            BASE_CURRENCY,
+            transaction_date
+        )
+
+    base_amount = (amount * rate).quantize(
+        Decimal("0.01"),
+        rounding=ROUND_HALF_UP
+    )
+    validate_amount(base_amount)
+    return base_amount, currency, rate, rate_date
+
+
 def validate_category(user_id, category_id, transaction_type):
 
     if category_id in (None, ""):
@@ -114,10 +139,11 @@ def create_transaction(
     transaction_type,
     description="",
     category_id=None,
-    transaction_date=None
+    transaction_date=None,
+    currency=BASE_CURRENCY
 ):
 
-    amount = validate_amount(amount)
+    original_amount = validate_amount(amount)
 
     transaction_type = validate_transaction_type(
         transaction_type
@@ -134,10 +160,21 @@ def create_transaction(
     transaction_date = validate_transaction_date(
         transaction_date
     )
+    amount, currency, exchange_rate, exchange_rate_date = (
+        convert_transaction_amount(
+            original_amount,
+            currency,
+            transaction_date
+        )
+    )
 
     transaction = Transaction(
         user_id=user_id,
         amount=amount,
+        original_amount=original_amount,
+        currency=currency,
+        exchange_rate=exchange_rate,
+        exchange_rate_date=exchange_rate_date,
         type=transaction_type,
         description=description,
         category_id=category_id,
@@ -161,7 +198,8 @@ def create_transaction_with_new_category(
     transaction_type,
     description,
     category_name,
-    transaction_date=None
+    transaction_date=None,
+    currency=BASE_CURRENCY
 ):
 
     amount = validate_amount(amount)
@@ -183,7 +221,8 @@ def create_transaction_with_new_category(
             transaction_type=transaction_type,
             description=description,
             category_id=category.id,
-            transaction_date=transaction_date
+            transaction_date=transaction_date,
+            currency=currency
         )
 
     category = Category(
@@ -202,7 +241,8 @@ def create_transaction_with_new_category(
             transaction_type=transaction_type,
             description=description,
             category_id=category.id,
-            transaction_date=transaction_date
+            transaction_date=transaction_date,
+            currency=currency
         )
 
     except Exception:
@@ -256,7 +296,8 @@ def update_transaction(
     transaction_type,
     description="",
     category_id=None,
-    transaction_date=None
+    transaction_date=None,
+    currency=BASE_CURRENCY
 ):
 
     transaction = get_transaction_by_id(
@@ -267,7 +308,7 @@ def update_transaction(
     if not transaction:
         raise ValueError("Transaction not found.")
 
-    amount = validate_amount(amount)
+    original_amount = validate_amount(amount)
 
     transaction_type = validate_transaction_type(
         transaction_type
@@ -285,7 +326,19 @@ def update_transaction(
         transaction_date
     )
 
+    amount, currency, exchange_rate, exchange_rate_date = (
+        convert_transaction_amount(
+            original_amount,
+            currency,
+            transaction_date
+        )
+    )
+
     transaction.amount = amount
+    transaction.original_amount = original_amount
+    transaction.currency = currency
+    transaction.exchange_rate = exchange_rate
+    transaction.exchange_rate_date = exchange_rate_date
     transaction.type = transaction_type
     transaction.description = description
     transaction.category_id = category_id

@@ -1158,6 +1158,15 @@ small {
     color: var(--rose);
 }
 
+.amount-base-currency {
+    display: block;
+    color: var(--muted);
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
 .insight-context {
     margin: -10px 0 16px;
     color: var(--muted);
@@ -1807,7 +1816,6 @@ small {
 .amount-cell {
     font-variant-numeric: tabular-nums;
     font-weight: 700;
-    white-space: nowrap;
 }
 
 .amount-cell.income {

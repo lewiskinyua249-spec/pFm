@@ -4,8 +4,9 @@ import json
 import re
 import secrets
 import time
-from datetime import date
-from decimal import Decimal
+from calendar import monthrange
+from datetime import date, timedelta
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
 
 from flask import current_app
@@ -17,7 +18,14 @@ from app.services.transaction_service import (
     validate_category,
     validate_description,
     validate_transaction_date,
-    validate_transaction_type
+    validate_transaction_type,
+    convert_transaction_amount
+)
+from app.services.exchange_rate_service import (
+    BASE_CURRENCY,
+    RATE_LOOKBACK_DAYS,
+    get_exchange_rates,
+    validate_currency
 )
 
 
@@ -31,7 +39,11 @@ HEADER_ALIASES = {
     "type": {"type", "transaction type"},
     "category": {"category"},
     "description": {"description", "memo", "payee", "details"},
-    "amount": {"amount", "value"}
+    "amount": {"amount", "original amount", "value"},
+    "currency": {"currency", "currency code"},
+    "base_amount": {"amount (kes)", "base amount (kes)"},
+    "exchange_rate": {"exchange rate"},
+    "exchange_rate_date": {"exchange rate date", "rate date"}
 }
 
 
@@ -45,12 +57,109 @@ def _normalize_description(value):
 
 def _parse_import_amount(value):
     amount_text = (value or "").strip()
-    amount_text = re.sub(r"^(?:KES|KSH)\s*", "", amount_text, flags=re.IGNORECASE)
+    amount_text = re.sub(r"^[A-Z]{3}\s*", "", amount_text, flags=re.IGNORECASE)
     if "," in amount_text:
         if not re.fullmatch(r"\d{1,3}(?:,\d{3})+(?:\.\d+)?", amount_text):
             raise ValueError("Enter a valid transaction amount.")
         amount_text = amount_text.replace(",", "")
     return validate_amount(amount_text)
+
+
+def _get_import_amount_details(
+    original_amount,
+    currency,
+    transaction_date,
+    raw_base_amount,
+    raw_exchange_rate,
+    raw_exchange_rate_date,
+    rate_cache
+):
+    provided_metadata = (
+        raw_base_amount,
+        raw_exchange_rate,
+        raw_exchange_rate_date
+    )
+    if any(value for value in provided_metadata) and not all(
+        value for value in provided_metadata
+    ):
+        raise ValueError(
+            "CSV conversion columns must include Amount (KES), "
+            "Exchange Rate, and Exchange Rate Date together."
+        )
+
+    if all(value for value in provided_metadata):
+        base_amount = _parse_import_amount(raw_base_amount)
+        try:
+            exchange_rate = Decimal(raw_exchange_rate)
+            exchange_rate_date = validate_transaction_date(
+                raw_exchange_rate_date
+            )
+        except (InvalidOperation, TypeError) as error:
+            raise ValueError("Enter valid exchange rate details.") from error
+
+        if (
+            not exchange_rate.is_finite()
+            or exchange_rate <= 0
+            or exchange_rate_date > transaction_date
+        ):
+            raise ValueError("Enter valid exchange rate details.")
+        if currency == BASE_CURRENCY and (
+            exchange_rate != Decimal("1")
+            or base_amount != original_amount
+        ):
+            raise ValueError("KES import amounts must use a rate of 1.")
+
+        expected_amount = (
+            original_amount * exchange_rate
+        ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        if expected_amount != base_amount:
+            raise ValueError(
+                "CSV base amount does not match its original amount and rate."
+            )
+        return base_amount, exchange_rate, exchange_rate_date
+
+    if currency == BASE_CURRENCY:
+        base_amount, _, exchange_rate, exchange_rate_date = (
+            convert_transaction_amount(
+                original_amount,
+                currency,
+                transaction_date
+            )
+        )
+        return base_amount, exchange_rate, exchange_rate_date
+
+    cache_key = (
+        currency,
+        transaction_date.year,
+        transaction_date.month
+    )
+    if cache_key not in rate_cache:
+        month_start = date(transaction_date.year, transaction_date.month, 1)
+        month_end = date(
+            transaction_date.year,
+            transaction_date.month,
+            monthrange(transaction_date.year, transaction_date.month)[1]
+        )
+        lookup_end = min(month_end, date.today())
+        rate_cache[cache_key] = get_exchange_rates(
+            currency,
+            BASE_CURRENCY,
+            month_start - timedelta(days=RATE_LOOKBACK_DAYS),
+            lookup_end
+        )
+
+    for exchange_rate_date, exchange_rate in reversed(rate_cache[cache_key]):
+        if exchange_rate_date <= transaction_date:
+            base_amount = (original_amount * exchange_rate).quantize(
+                Decimal("0.01"),
+                rounding=ROUND_HALF_UP
+            )
+            validate_amount(base_amount)
+            return base_amount, exchange_rate, exchange_rate_date
+
+    raise ValueError(
+        "No exchange rate is available for that transaction date."
+    )
 
 
 def _transaction_fingerprint(row):
@@ -125,6 +234,7 @@ def preview_transaction_csv(user_id, content):
     }
 
     rows = []
+    rate_cache = {}
     try:
         for row_number, raw_row in enumerate(reader, start=2):
             if row_number > MAX_IMPORT_ROWS + 1:
@@ -153,6 +263,10 @@ def preview_transaction_csv(user_id, content):
                 "date": None,
                 "type": None,
                 "amount": None,
+                "original_amount": None,
+                "currency": "KES",
+                "exchange_rate": None,
+                "exchange_rate_date": None,
                 "description": raw_description,
                 "category_id": None,
                 "category": raw_category,
@@ -173,7 +287,41 @@ def preview_transaction_csv(user_id, content):
                 errors.append(str(error))
 
             try:
-                parsed["amount"] = _parse_import_amount(raw_amount)
+                parsed["original_amount"] = _parse_import_amount(raw_amount)
+            except ValueError as error:
+                errors.append(str(error))
+
+            try:
+                parsed["currency"] = validate_currency(
+                    raw_row.get(mapped_headers.get("currency", "")) or "KES"
+                )
+                if parsed["original_amount"] is not None and parsed["date"]:
+                    transaction_date = validate_transaction_date(
+                        parsed["date"]
+                    )
+                    (
+                        parsed["amount"],
+                        parsed["exchange_rate"],
+                        parsed["exchange_rate_date"]
+                    ) = _get_import_amount_details(
+                        parsed["original_amount"],
+                        parsed["currency"],
+                        transaction_date,
+                        (
+                            raw_row.get(mapped_headers.get("base_amount", ""))
+                            or ""
+                        ).strip(),
+                        (
+                            raw_row.get(mapped_headers.get("exchange_rate", ""))
+                            or ""
+                        ).strip(),
+                        (
+                            raw_row.get(
+                                mapped_headers.get("exchange_rate_date", "")
+                            ) or ""
+                        ).strip(),
+                        rate_cache
+                    )
             except ValueError as error:
                 errors.append(str(error))
 
@@ -196,9 +344,20 @@ def preview_transaction_csv(user_id, content):
 
             if parsed["date"] is not None:
                 parsed["date"] = parsed["date"].isoformat()
+            if parsed["original_amount"] is not None:
+                parsed["original_amount_display"] = (
+                    f"{parsed['original_amount']:,.2f}"
+                )
+                parsed["original_amount"] = str(parsed["original_amount"])
             if parsed["amount"] is not None:
                 parsed["amount_display"] = f"{parsed['amount']:,.2f}"
                 parsed["amount"] = str(parsed["amount"])
+            if parsed["exchange_rate"] is not None:
+                parsed["exchange_rate"] = str(parsed["exchange_rate"])
+            if parsed["exchange_rate_date"] is not None:
+                parsed["exchange_rate_date"] = (
+                    parsed["exchange_rate_date"].isoformat()
+                )
 
             if not errors:
                 parsed["status"] = "ready"
@@ -254,7 +413,19 @@ def import_staged_transactions(user_id, rows):
 
         transaction_type = validate_transaction_type(row.get("type"))
         amount = validate_amount(row.get("amount"))
+        original_amount = validate_amount(
+            row.get("original_amount", row.get("amount"))
+        )
+        currency = validate_currency(row.get("currency", "KES"))
+        exchange_rate = Decimal(str(row.get("exchange_rate") or "1"))
+        if not exchange_rate.is_finite() or exchange_rate <= 0:
+            raise ValueError("Enter valid exchange rate details.")
         transaction_date = validate_transaction_date(row.get("date"))
+        exchange_rate_date = validate_transaction_date(
+            row.get("exchange_rate_date") or transaction_date
+        )
+        if exchange_rate_date > transaction_date:
+            raise ValueError("Enter valid exchange rate details.")
         description = validate_description(row.get("description"))
         category_id = validate_category(
             user_id,
@@ -265,6 +436,10 @@ def import_staged_transactions(user_id, rows):
             "date": transaction_date,
             "type": transaction_type,
             "amount": amount,
+            "original_amount": original_amount,
+            "currency": currency,
+            "exchange_rate": exchange_rate,
+            "exchange_rate_date": exchange_rate_date,
             "description": description,
             "category_id": category_id
         })
@@ -285,6 +460,10 @@ def import_staged_transactions(user_id, rows):
             date=row["date"],
             type=row["type"],
             amount=row["amount"],
+            original_amount=row["original_amount"],
+            currency=row["currency"],
+            exchange_rate=row["exchange_rate"],
+            exchange_rate_date=row["exchange_rate_date"],
             description=row["description"],
             category_id=row["category_id"]
         ))

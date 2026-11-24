@@ -114,7 +114,11 @@ def generate_transactions_csv(
         "Type",
         "Category",
         "Description",
-        "Amount"
+        "Amount",
+        "Currency",
+        "Amount (KES)",
+        "Exchange Rate",
+        "Exchange Rate Date"
     ])
 
     for transaction in transactions:
@@ -129,7 +133,11 @@ def generate_transactions_csv(
             transaction.type,
             category_name,
             transaction.description or "",
-            money_to_string(transaction.amount)
+            money_to_string(transaction.original_amount),
+            transaction.currency,
+            money_to_string(transaction.amount),
+            money_to_string(transaction.exchange_rate),
+            date_to_string(transaction.exchange_rate_date)
         ])
 
     return output.getvalue()
@@ -175,7 +183,7 @@ def generate_personal_backup(user_id):
 
         "application": "Personal Finance Manager",
 
-        "backup_version": 2,
+        "backup_version": 3,
 
         "backup_date": datetime.now(
             timezone.utc
@@ -187,6 +195,12 @@ def generate_personal_backup(user_id):
             {
                 "id": item.id,
                 "amount": money_to_string(item.amount),
+                "original_amount": money_to_string(item.original_amount),
+                "currency": item.currency,
+                "exchange_rate": money_to_string(item.exchange_rate),
+                "exchange_rate_date": date_to_string(
+                    item.exchange_rate_date
+                ),
                 "type": item.type,
                 "description": item.description,
                 "date": date_to_string(item.date),

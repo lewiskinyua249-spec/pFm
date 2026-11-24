@@ -85,6 +85,7 @@ from app.services.report_service import (
 from app.services.spending_insight_service import (
     get_spending_insights
 )
+from app.services.exchange_rate_service import SUPPORTED_CURRENCIES
 
 main = Blueprint("main", __name__)
 
@@ -369,6 +370,8 @@ def add_transaction():
         amount = request.form.get("amount", "").strip()
         transaction_type = request.form.get("type", "").strip()
         description = request.form.get("description", "").strip()
+        currency = request.form.get("currency", "KES").strip().upper()
+        transaction_date = request.form.get("date", "").strip()
         category_id = request.form.get("category_id", "").strip()
         new_category_name = request.form.get(
             "new_category_name",
@@ -380,7 +383,8 @@ def add_transaction():
 
             return render_template(
                 "add_transaction.html",
-                categories=categories
+                categories=categories,
+                currencies=SUPPORTED_CURRENCIES
             )
 
         try:
@@ -394,7 +398,8 @@ def add_transaction():
 
             return render_template(
                 "add_transaction.html",
-                categories=categories
+                categories=categories,
+                currencies=SUPPORTED_CURRENCIES
             )
 
         if transaction_type not in ["income", "expense"]:
@@ -402,7 +407,8 @@ def add_transaction():
 
             return render_template(
                 "add_transaction.html",
-                categories=categories
+                categories=categories,
+                currencies=SUPPORTED_CURRENCIES
             )
 
         create_new_category = category_id == "new"
@@ -415,7 +421,8 @@ def add_transaction():
 
                 return render_template(
                     "add_transaction.html",
-                    categories=categories
+                    categories=categories,
+                    currencies=SUPPORTED_CURRENCIES
                 )
         elif not create_new_category:
             category_id = None
@@ -434,7 +441,8 @@ def add_transaction():
 
                 return render_template(
                     "add_transaction.html",
-                    categories=categories
+                    categories=categories,
+                    currencies=SUPPORTED_CURRENCIES
                 )
 
         try:
@@ -444,7 +452,9 @@ def add_transaction():
                     amount=amount,
                     transaction_type=transaction_type,
                     description=description,
-                    category_name=new_category_name
+                    category_name=new_category_name,
+                    transaction_date=transaction_date,
+                    currency=currency
                 )
             else:
                 create_transaction(
@@ -452,7 +462,9 @@ def add_transaction():
                     amount=amount,
                     transaction_type=transaction_type,
                     description=description,
-                    category_id=category_id
+                    category_id=category_id,
+                    transaction_date=transaction_date,
+                    currency=currency
                 )
 
             flash("Transaction added successfully.", "success")
@@ -471,7 +483,8 @@ def add_transaction():
 
     return render_template(
         "add_transaction.html",
-        categories=categories
+        categories=categories,
+        currencies=SUPPORTED_CURRENCIES
     )
 
 
@@ -999,6 +1012,7 @@ def edit_transaction(transaction_id):
         description = request.form.get("description", "").strip()
         category_id = request.form.get("category_id", "").strip()
         transaction_date = request.form.get("date", "").strip()
+        currency = request.form.get("currency", "KES").strip().upper()
 
         try:
             update_transaction(
@@ -1008,7 +1022,8 @@ def edit_transaction(transaction_id):
                 transaction_type=transaction_type,
                 description=description,
                 category_id=category_id or None,
-                transaction_date=transaction_date
+                transaction_date=transaction_date,
+                currency=currency
             )
 
             flash("Transaction updated successfully.", "success")
@@ -1023,7 +1038,8 @@ def edit_transaction(transaction_id):
     return render_template(
         "edit_transaction.html",
         transaction=transaction,
-        categories=categories
+        categories=categories,
+        currencies=SUPPORTED_CURRENCIES
     )
 
 
