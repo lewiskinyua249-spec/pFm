@@ -94,6 +94,12 @@ textarea:focus-visible {
     background: #fbfcfa;
 }
 
+.sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
 .brand {
     display: inline-flex;
     width: fit-content;
@@ -194,6 +200,23 @@ textarea:focus-visible {
     font-family: "Aptos Display", "Segoe UI", sans-serif;
     font-size: 19px;
     line-height: 1;
+}
+
+.mobile-nav-toggle {
+    display: none;
+}
+
+.mobile-nav-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 4;
+    display: none;
+    border: 0;
+    background: rgba(14, 24, 19, .46);
+}
+
+.mobile-nav-backdrop.is-visible {
+    display: block;
 }
 
 .is-active .nav-icon {
@@ -2353,15 +2376,20 @@ small {
         position: sticky;
         inset: 0 0 auto;
         width: 100%;
-        padding: 12px 14px 9px;
+        min-height: 60px;
+        padding: 10px 14px;
         border-right: 0;
         border-bottom: 1px solid var(--line);
         background: rgba(251, 252, 250, .96);
         backdrop-filter: blur(16px);
     }
 
+    .sidebar-header {
+        min-height: 38px;
+    }
+
     .brand {
-        margin: 0 0 8px 3px;
+        margin: 0 0 0 3px;
     }
 
     .brand-mark {
@@ -2375,78 +2403,104 @@ small {
         font-size: 19px;
     }
 
-    .sidebar > .nav-label,
-    .sidebar-bottom > .nav-label,
-    .utility-link {
-        display: none;
-    }
-
-    .nav-group-label {
-        display: none;
-    }
-
-    .sidebar-bottom {
-        display: block;
-        margin-top: 0;
-    }
-
-    .profile-row {
-        position: absolute;
-        top: 11px;
-        right: 14px;
-        display: flex;
-        margin: 0;
-        padding: 0;
-        border: 0;
-    }
-
-    .profile-row .avatar,
-    .profile-row .profile-name {
-        display: none;
-    }
-
-    .logout-button {
-        padding: 5px 8px;
-        border-radius: 7px;
-        background: #f0f3f0;
-        color: #536159;
-        font-size: 11px;
+    .mobile-nav-toggle {
+        display: inline-grid;
+        width: 40px;
+        height: 40px;
+        place-items: center;
+        border: 1px solid var(--line);
+        border-radius: 11px;
+        background: var(--surface);
+        color: var(--ink);
+        font-size: 19px;
+        cursor: pointer;
     }
 
     .primary-nav {
-        display: flex;
-        gap: 4px;
-        overflow-x: auto;
-        scrollbar-width: none;
+        display: none;
+        gap: 0;
+        margin-top: 20px;
     }
 
-    .primary-nav::-webkit-scrollbar {
+    .sidebar-bottom {
         display: none;
     }
 
-    .nav-group {
-        display: contents;
+    .sidebar.is-mobile-open {
+        position: fixed;
+        inset: 0 auto 0 0;
+        z-index: 6;
+        width: min(320px, 86vw);
+        height: 100vh;
+        height: 100dvh;
+        min-height: 100vh;
+        min-height: 100dvh;
+        overflow-y: auto;
+        padding: 18px 16px 16px;
+        border-right: 1px solid var(--line);
+        border-bottom: 0;
+        background: var(--surface);
+        box-shadow: 12px 0 36px rgba(14, 24, 19, .12);
+        backdrop-filter: none;
     }
 
-    .nav-group + .nav-group {
-        margin-top: 0;
+    .sidebar.is-mobile-open .brand {
+        margin-left: 3px;
     }
 
-    .nav-link {
-        min-height: 37px;
-        flex: 0 0 auto;
-        gap: 7px;
-        padding: 0 10px;
+    .sidebar.is-mobile-open .primary-nav {
+        display: grid;
+    }
+
+    .sidebar.is-mobile-open .nav-group {
+        display: grid;
+        gap: 4px;
+    }
+
+    .sidebar.is-mobile-open .nav-group + .nav-group {
+        margin-top: 14px;
+    }
+
+    .sidebar.is-mobile-open .nav-group-label {
+        display: block;
+    }
+
+    .sidebar.is-mobile-open .nav-link {
+        min-height: 44px;
+        gap: 12px;
+        padding: 0 12px;
+        font-size: 14px;
+    }
+
+    .sidebar.is-mobile-open .nav-icon {
+        width: 20px;
+        font-size: 19px;
+    }
+
+    .sidebar.is-mobile-open .sidebar-bottom {
+        display: block;
+        margin-top: auto;
+    }
+
+    .sidebar.is-mobile-open .profile-row {
+        margin-top: 24px;
+        padding-top: 15px;
+        border-top: 1px solid var(--line);
+    }
+
+    .sidebar.is-mobile-open .logout-button {
+        padding: 7px 10px;
+        border-radius: 8px;
+        background: var(--surface-hover, #f0f3f0);
         font-size: 12px;
     }
 
-    .nav-icon {
-        width: auto;
-        font-size: 16px;
+    .mobile-nav-backdrop.is-visible {
+        display: block;
     }
 
     .workspace {
-        min-height: calc(100vh - 93px);
+        min-height: calc(100vh - 60px);
         margin-left: 0;
     }
 
@@ -2535,10 +2589,6 @@ small {
         gap: 12px;
         padding-right: 14px;
         padding-left: 14px;
-    }
-
-    .nav-link {
-        font-size: 11px;
     }
 
     .report-grid {

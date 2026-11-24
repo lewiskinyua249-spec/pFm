@@ -191,6 +191,16 @@ def test_settings_page_shows_existing_account_and_preferences(
     assert b"Password changes and session management are not currently supported" in response.data
     assert b"Scheduled Transactions" in response.data
     assert b"Reports &amp; Insights" in response.data
+    assert b'data-mobile-nav-toggle' in response.data
+    assert b'aria-controls="primary-nav"' in response.data
+    assert b'href="/transactions"' in response.data
+    assert b'href="/recurring"' in response.data
+    assert b'href="/categories"' in response.data
+    assert b'href="/budgets"' in response.data
+    assert b'href="/savings-goals"' in response.data
+    assert b'href="/reports"' in response.data
+    assert b'href="/settings"' in response.data
+    assert b'js/mobile-nav.js' in response.data
 
 
 def test_user_can_register(client):

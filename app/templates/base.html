@@ -14,12 +14,19 @@
     {% if current_user.is_authenticated %}
         <div class="app-shell">
             <aside class="sidebar">
-                <a class="brand" href="{{ url_for('main.dashboard') }}">
-                    <span class="brand-mark" aria-hidden="true">P</span>
-                    <span class="brand-name">Personal Finance</span>
-                </a>
+                <div class="sidebar-header">
+                    <a class="brand" href="{{ url_for('main.dashboard') }}">
+                        <span class="brand-mark" aria-hidden="true">P</span>
+                        <span class="brand-name">Personal Finance</span>
+                    </a>
+                    <button class="mobile-nav-toggle" type="button"
+                            aria-controls="primary-nav" aria-expanded="false"
+                            aria-label="Open navigation" data-mobile-nav-toggle>
+                        <span aria-hidden="true" data-mobile-nav-icon>☰</span>
+                    </button>
+                </div>
 
-                <nav class="primary-nav" aria-label="Main navigation">
+                <nav class="primary-nav" id="primary-nav" aria-label="Main navigation">
                     <div class="nav-group">
                         <span class="nav-group-label">Overview</span>
                         <a class="nav-link {% if request.endpoint == 'main.dashboard' %}is-active{% endif %}"
@@ -88,6 +95,8 @@
                     </div>
                 </div>
             </aside>
+            <button class="mobile-nav-backdrop" type="button"
+                    aria-label="Close navigation" data-mobile-nav-backdrop hidden></button>
 
             <div class="workspace">
                 <header class="topbar">
@@ -166,5 +175,8 @@
     {% endif %}
 
     {% block scripts %}{% endblock %}
+    {% if current_user.is_authenticated %}
+        <script src="{{ url_for('static', filename='js/mobile-nav.js') }}" defer></script>
+    {% endif %}
 </body>
 </html>
