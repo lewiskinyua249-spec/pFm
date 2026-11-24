@@ -44,8 +44,8 @@
                 <label for="type">Transaction type</label>
                 <select id="type" name="type" required>
                     <option value="">Select a type</option>
-                    <option value="income">Income</option>
-                    <option value="expense">Expense</option>
+                    <option value="income" {% if request.form.get("type") == "income" %}selected{% endif %}>Income</option>
+                    <option value="expense" {% if request.form.get("type") == "expense" %}selected{% endif %}>Expense</option>
                 </select>
             </div>
 
@@ -74,7 +74,7 @@
 
             <div class="field field-wide">
                 <label for="description">Description <span class="optional-label">Optional</span></label>
-                <textarea id="description" name="description" maxlength="255" rows="4" placeholder="What was this transaction for?"></textarea>
+                <textarea id="description" name="description" maxlength="255" rows="4" placeholder="What was this transaction for?">{{ request.form.get('description', '') }}</textarea>
             </div>
 
             <div class="form-actions field-wide">

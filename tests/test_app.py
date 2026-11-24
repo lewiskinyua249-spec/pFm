@@ -252,14 +252,14 @@ def test_dashboard_filters_summary_by_requested_dates(
     assert today.isoformat().encode() in response.data
 
 
-def test_dashboard_defaults_to_week_to_date_and_shows_current_budget(
+def test_dashboard_defaults_to_month_to_date_and_shows_current_budget(
     app,
     client,
     registered_user
 ):
     with app.app_context():
         today = date.today()
-        week_start = today - timedelta(days=today.weekday())
+        month_start = today.replace(day=1)
         category = create_category(
             user_id=registered_user["id"],
             name="Groceries",
@@ -280,6 +280,14 @@ def test_dashboard_defaults_to_week_to_date_and_shows_current_budget(
             category_id=category.id,
             transaction_date=today
         )
+        create_transaction(
+            user_id=registered_user["id"],
+            amount="900.00",
+            transaction_type="expense",
+            description="Previous month expense",
+            category_id=category.id,
+            transaction_date=month_start - timedelta(days=1)
+        )
     client.post(
         "/login",
         data={
@@ -290,11 +298,14 @@ def test_dashboard_defaults_to_week_to_date_and_shows_current_budget(
     response = client.get("/")
 
     assert response.status_code == 200
-    assert f'value="{week_start.isoformat()}"'.encode() in response.data
-    assert b"Weekly check-in" in response.data
+    assert f'value="{month_start.isoformat()}"'.encode() in response.data
+    assert b"Monthly check-in" in response.data
+    assert b"Weekly check-in" not in response.data
     assert b"Budget pace" in response.data
     assert b'dashboard-activity-list' in response.data
     assert b"Weekly groceries" in response.data
+    assert b"Previous month expense" not in response.data
+    assert b"KES 100.00" in response.data
     assert b"Groceries" in response.data
     assert b"Month-end estimate" in response.data
 
@@ -2087,6 +2098,46 @@ def test_add_foreign_currency_transaction_shows_kes_equivalent(
     list_response = client.get("/transactions")
     assert b"USD 12.50" in list_response.data
     assert b"KES 1,625.00" in list_response.data
+
+
+def test_add_transaction_shows_exchange_rate_error_without_losing_form(
+    app,
+    client,
+    registered_user,
+    monkeypatch
+):
+    _login_route_test_user(client, registered_user)
+
+    def unavailable_rate(*args):
+        raise ValueError(
+            "Exchange rates are temporarily unavailable. Please try again."
+        )
+
+    monkeypatch.setattr(
+        transaction_service,
+        "get_exchange_rate",
+        unavailable_rate
+    )
+
+    response = client.post(
+        "/transactions/add",
+        data={
+            "amount": "12.50",
+            "currency": "USD",
+            "date": "2026-11-22",
+            "type": "expense",
+            "description": "Foreign purchase",
+            "category_id": ""
+        }
+    )
+
+    assert response.status_code == 200
+    assert b"Exchange rates are temporarily unavailable" in response.data
+    assert b'value="12.50"' in response.data
+    assert b'value="2026-11-22"' in response.data
+    assert b"Foreign purchase</textarea>" in response.data
+    with app.app_context():
+        assert get_user_transactions(registered_user["id"]) == []
 
 
 def test_dashboard_displays_user_transaction(

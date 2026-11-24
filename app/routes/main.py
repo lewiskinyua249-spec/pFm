@@ -95,7 +95,7 @@ main = Blueprint("main", __name__)
 def dashboard():
 
     today = date.today()
-    default_start = today - timedelta(days=today.weekday())
+    default_start = today.replace(day=1)
     start_date_value = request.args.get(
         "start_date",
         default_start.isoformat()
@@ -165,7 +165,7 @@ def dashboard():
         budget_pacing=budget_pacing,
         upcoming_items=upcoming_items,
         today=today,
-        is_weekly_check_in=(
+        is_monthly_check_in=(
             start_date == default_start and end_date == today
         ),
         start_date=start_date.isoformat(),
@@ -364,6 +364,7 @@ def remove_recurring_item(item_id):
 def add_transaction():
 
     categories = get_user_categories(current_user.id)
+    today = date.today()
 
     if request.method == "POST":
 
@@ -384,7 +385,8 @@ def add_transaction():
             return render_template(
                 "add_transaction.html",
                 categories=categories,
-                currencies=SUPPORTED_CURRENCIES
+                currencies=SUPPORTED_CURRENCIES,
+                today=today
             )
 
         try:
@@ -399,7 +401,8 @@ def add_transaction():
             return render_template(
                 "add_transaction.html",
                 categories=categories,
-                currencies=SUPPORTED_CURRENCIES
+                currencies=SUPPORTED_CURRENCIES,
+                today=today
             )
 
         if transaction_type not in ["income", "expense"]:
@@ -408,7 +411,8 @@ def add_transaction():
             return render_template(
                 "add_transaction.html",
                 categories=categories,
-                currencies=SUPPORTED_CURRENCIES
+                currencies=SUPPORTED_CURRENCIES,
+                today=today
             )
 
         create_new_category = category_id == "new"
@@ -422,7 +426,8 @@ def add_transaction():
                 return render_template(
                     "add_transaction.html",
                     categories=categories,
-                    currencies=SUPPORTED_CURRENCIES
+                    currencies=SUPPORTED_CURRENCIES,
+                    today=today
                 )
         elif not create_new_category:
             category_id = None
@@ -442,7 +447,8 @@ def add_transaction():
                 return render_template(
                     "add_transaction.html",
                     categories=categories,
-                    currencies=SUPPORTED_CURRENCIES
+                    currencies=SUPPORTED_CURRENCIES,
+                    today=today
                 )
 
         try:
@@ -484,7 +490,8 @@ def add_transaction():
     return render_template(
         "add_transaction.html",
         categories=categories,
-        currencies=SUPPORTED_CURRENCIES
+        currencies=SUPPORTED_CURRENCIES,
+        today=today
     )
 
 
