@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}Resend verification email{% endblock %}
+{% block body_class %}auth-body{% endblock %}
+
+{% block auth_content %}
+    <p class="eyebrow">Email confirmation</p>
+    <h1>Check your inbox.</h1>
+    <p>Enter the email address used to create your account and we'll send a new six-digit verification code if it still needs confirmation.</p>
+
+    <form method="POST" action="{{ url_for('auth.resend_verification') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="field">
+            <label for="email">Email address</label>
+            <input type="email" id="email" name="email" maxlength="120"
+                   autocomplete="email" placeholder="you@example.com" required>
+        </div>
+
+        <button type="submit">Send verification email</button>
+    </form>
+
+    <p class="auth-switch"><a href="{{ url_for('auth.login') }}">Back to log in</a></p>
+{% endblock %}

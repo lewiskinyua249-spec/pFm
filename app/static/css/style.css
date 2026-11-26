@@ -212,7 +212,7 @@ textarea:focus-visible {
     z-index: 4;
     display: none;
     border: 0;
-    background: rgba(14, 24, 19, .46);
+    background: rgba(0, 0, 0, .22);
 }
 
 .mobile-nav-backdrop.is-visible {
@@ -359,6 +359,39 @@ button.theme-toggle:hover {
     transform: translateY(-1px);
     background: var(--canvas);
     color: var(--ink);
+}
+
+.app-shell button.mobile-nav-toggle {
+    display: none;
+}
+
+.app-shell button.mobile-nav-toggle:hover {
+    transform: none;
+    background: var(--surface);
+    color: var(--ink);
+}
+
+.app-shell button.mobile-nav-backdrop {
+    display: none;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: rgba(0, 0, 0, .22);
+    color: transparent;
+    font-size: 0;
+    transition: none;
+    transform: none;
+}
+
+.app-shell button.mobile-nav-backdrop:hover {
+    background: rgba(0, 0, 0, .22);
+    color: transparent;
+    transform: none;
+}
+
+.app-shell button.mobile-nav-backdrop.is-visible {
+    display: block;
 }
 
 .theme-toggle[hidden] {
@@ -2403,17 +2436,25 @@ small {
         font-size: 19px;
     }
 
-    .mobile-nav-toggle {
+    .app-shell button.mobile-nav-toggle {
         display: inline-grid;
         width: 40px;
         height: 40px;
+        min-height: 40px;
         place-items: center;
+        padding: 0;
         border: 1px solid var(--line);
         border-radius: 11px;
         background: var(--surface);
         color: var(--ink);
         font-size: 19px;
         cursor: pointer;
+    }
+
+    .app-shell button.mobile-nav-toggle:hover {
+        background: var(--surface-hover, var(--surface));
+        color: var(--ink);
+        transform: none;
     }
 
     .primary-nav {

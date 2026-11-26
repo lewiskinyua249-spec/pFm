@@ -66,7 +66,7 @@ from app.services.savings_goal_service import (
     delete_savings_goal
 )
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from app.services.report_service import get_financial_report
 
@@ -107,6 +107,20 @@ def client(app):
     """Provide a test client."""
 
     return app.test_client()
+
+
+@pytest.fixture
+def verification_email_sender(monkeypatch):
+    sent_messages = []
+
+    def capture_email(recipient, verification_code, verification_url):
+        sent_messages.append((recipient, verification_code, verification_url))
+
+    monkeypatch.setattr(
+        "app.routes.auth.send_verification_email",
+        capture_email
+    )
+    return sent_messages
 
 
 @pytest.fixture
@@ -203,7 +217,7 @@ def test_settings_page_shows_existing_account_and_preferences(
     assert b'js/mobile-nav.js' in response.data
 
 
-def test_user_can_register(client):
+def test_user_can_register(client, verification_email_sender):
     response = client.post(
         "/register",
         data={
@@ -216,6 +230,10 @@ def test_user_can_register(client):
 
     assert response.status_code == 200
     assert b"Registration successful" in response.data
+    assert b"Enter the six-digit code" in response.data
+    assert verification_email_sender[0][0] == "new@example.com"
+    assert re.fullmatch(r"[0-9]{6}", verification_email_sender[0][1])
+    assert "/verify-email" in verification_email_sender[0][2]
 
 
 def test_registration_rejects_duplicate_email(
@@ -1739,7 +1757,11 @@ def test_feature_pages_require_authenticated_access(
     assert response.status_code == 200
 
 
-def test_auth_register_creates_user(app, client):
+def test_auth_register_creates_user(
+    app,
+    client,
+    verification_email_sender
+):
     response = client.post(
         "/register",
         data={
@@ -1761,6 +1783,7 @@ def test_auth_register_creates_user(app, client):
         assert user.username == "newuser"
         assert user.check_password("NewPassword123")
         assert user.password_hash != "NewPassword123"
+        assert user.email_verified is False
 
 
 def test_auth_register_rejects_missing_fields(client):
@@ -1793,12 +1816,22 @@ def test_auth_register_rejects_long_username(client):
     assert b"Username cannot exceed 80 characters." in response.data
 
 
-def test_auth_register_rejects_invalid_email(client):
+@pytest.mark.parametrize(
+    "email",
+    [
+        "not-an-email",
+        "plain@",
+        "@example.com",
+        "user..name@example.com",
+        "user@example..com"
+    ]
+)
+def test_auth_register_rejects_invalid_email(client, email):
     response = client.post(
         "/register",
         data={
             "username": "invalidemail",
-            "email": "not-an-email",
+            "email": email,
             "password": "Password123"
         },
         follow_redirects=True
@@ -1874,7 +1907,11 @@ def test_auth_register_rejects_duplicate_email(
     assert b"Email already registered." in response.data
 
 
-def test_auth_register_normalizes_email(app, client):
+def test_auth_register_normalizes_email(
+    app,
+    client,
+    verification_email_sender
+):
     client.post(
         "/register",
         data={
@@ -1890,6 +1927,276 @@ def test_auth_register_normalizes_email(app, client):
         ).first()
 
         assert user is not None
+
+
+def test_auth_register_keeps_account_pending_when_email_delivery_fails(
+    app,
+    client,
+    monkeypatch
+):
+    from app.services.email_service import EmailDeliveryError
+
+    def fail_delivery(recipient, verification_code, verification_url):
+        raise EmailDeliveryError("SMTP unavailable")
+
+    monkeypatch.setattr(
+        "app.routes.auth.send_verification_email",
+        fail_delivery
+    )
+
+    response = client.post(
+        "/register",
+        data={
+            "username": "mailfailure",
+            "email": "mailfailure@example.com",
+            "password": "Password123"
+        },
+        follow_redirects=True
+    )
+
+    assert b"could not send the verification email" in response.data
+
+    with app.app_context():
+        user = User.query.filter_by(
+            email="mailfailure@example.com"
+        ).first()
+        assert user is not None
+        assert user.email_verified is False
+        assert user.email_verification_code_hash is None
+
+
+def test_unverified_user_cannot_log_in(client, app):
+    with app.app_context():
+        user = User(
+            username="pendinguser",
+            email="pending@example.com",
+            email_verified=False
+        )
+        user.set_password("Password123")
+        db.session.add(user)
+        db.session.commit()
+
+    response = client.post(
+        "/login",
+        data={
+            "email": "pending@example.com",
+            "password": "Password123"
+        },
+        follow_redirects=True
+    )
+
+    assert b"Enter the verification code sent to your email" in response.data
+    assert b"Send a new one" in response.data
+    assert client.get("/").status_code == 302
+
+
+def test_verification_code_activates_account(
+    app,
+    client,
+    verification_email_sender
+):
+    registration_response = client.post(
+        "/register",
+        data={
+            "username": "verifyuser",
+            "email": "verify@example.com",
+            "password": "Password123"
+        },
+        follow_redirects=True
+    )
+    assert b"Enter your code" in registration_response.data
+    email, code, verification_url = verification_email_sender[0]
+    assert email == "verify@example.com"
+    assert "/verify-email" in verification_url
+
+    with app.app_context():
+        user = User.query.filter_by(email=email).first()
+        assert user.email_verification_code_hash
+        assert code not in user.email_verification_code_hash
+
+    response = client.post(
+        "/verify-email",
+        data={"email": email, "code": code},
+        follow_redirects=True
+    )
+
+    assert b"Email verified. You can now log in." in response.data
+
+    with app.app_context():
+        user = User.query.filter_by(
+            email="verify@example.com"
+        ).first()
+        assert user.email_verified is True
+        assert user.email_verification_code_hash is None
+
+    login_response = client.post(
+        "/login",
+        data={
+            "email": "verify@example.com",
+            "password": "Password123"
+        },
+        follow_redirects=True
+    )
+    assert b"Dashboard" in login_response.data
+
+
+def test_invalid_verification_code_is_rejected(client, app):
+    with app.app_context():
+        user = User(
+            username="invalidcodeuser",
+            email="invalid-code@example.com",
+            email_verified=False,
+            email_verification_code_hash="0" * 64,
+            email_verification_code_expires_at=datetime.now(
+                timezone.utc
+            ).replace(tzinfo=None) + timedelta(minutes=10)
+        )
+        user.set_password("Password123")
+        db.session.add(user)
+        db.session.commit()
+
+    response = client.post(
+        "/verify-email",
+        data={"email": "invalid-code@example.com", "code": "111111"},
+        follow_redirects=True
+    )
+
+    assert b"email or verification code is incorrect" in response.data
+    with app.app_context():
+        user = User.query.filter_by(
+            email="invalid-code@example.com"
+        ).first()
+        assert user.email_verification_attempts == 1
+
+
+def test_legacy_verification_link_routes_to_code_resend(client):
+    response = client.get(
+        "/verify-email/old-link-token",
+        follow_redirects=True
+    )
+
+    assert b"Email verification now uses a six-digit code" in response.data
+    assert b"Check your inbox" in response.data
+
+
+def test_expired_verification_code_requires_resend(client, app):
+    with app.app_context():
+        user = User(
+            username="expiredcodeuser",
+            email="expired-code@example.com",
+            email_verified=False,
+            email_verification_code_hash="0" * 64,
+            email_verification_code_expires_at=datetime.now(
+                timezone.utc
+            ).replace(tzinfo=None) - timedelta(seconds=1)
+        )
+        user.set_password("Password123")
+        db.session.add(user)
+        db.session.commit()
+
+    response = client.post(
+        "/verify-email",
+        data={"email": "expired-code@example.com", "code": "111111"},
+        follow_redirects=True
+    )
+
+    assert b"verification code has expired" in response.data
+    with app.app_context():
+        user = User.query.filter_by(
+            email="expired-code@example.com"
+        ).first()
+        assert user.email_verification_code_hash is None
+
+
+def test_verification_code_locks_after_max_attempts(client, app):
+    with app.app_context():
+        user = User(
+            username="lockedcodeuser",
+            email="locked-code@example.com",
+            email_verified=False,
+            email_verification_code_hash="0" * 64,
+            email_verification_code_expires_at=datetime.now(
+                timezone.utc
+            ).replace(tzinfo=None) + timedelta(minutes=10),
+            email_verification_attempts=4
+        )
+        user.set_password("Password123")
+        db.session.add(user)
+        db.session.commit()
+
+    response = client.post(
+        "/verify-email",
+        data={"email": "locked-code@example.com", "code": "111111"},
+        follow_redirects=True
+    )
+
+    assert b"Too many incorrect codes" in response.data
+    with app.app_context():
+        user = User.query.filter_by(
+            email="locked-code@example.com"
+        ).first()
+        assert user.email_verification_attempts == 5
+
+
+def test_pending_user_can_resend_verification_email(
+    app,
+    client,
+    verification_email_sender
+):
+    with app.app_context():
+        user = User(
+            username="resenduser",
+            email="resend@example.com",
+            email_verified=False
+        )
+        user.set_password("Password123")
+        db.session.add(user)
+        db.session.commit()
+
+    response = client.post(
+        "/resend-verification",
+        data={"email": "resend@example.com"},
+        follow_redirects=True
+    )
+
+    assert b"A new verification code has been sent." in response.data
+    assert verification_email_sender[0][0] == "resend@example.com"
+    assert re.fullmatch(r"[0-9]{6}", verification_email_sender[0][1])
+
+    with app.app_context():
+        user = User.query.filter_by(
+            email="resend@example.com"
+        ).first()
+        assert user.email_verification_sent_at is not None
+        assert user.email_verification_code_hash is not None
+
+
+def test_resend_verification_obeys_cooldown(
+    app,
+    client,
+    verification_email_sender
+):
+    with app.app_context():
+        user = User(
+            username="cooldownuser",
+            email="cooldown@example.com",
+            email_verified=False,
+            email_verification_sent_at=datetime.now(
+                timezone.utc
+            ).replace(tzinfo=None)
+        )
+        user.set_password("Password123")
+        db.session.add(user)
+        db.session.commit()
+
+    response = client.post(
+        "/resend-verification",
+        data={"email": "cooldown@example.com"},
+        follow_redirects=True
+    )
+
+    assert b"Please wait" in response.data
+    assert verification_email_sender == []
 
 
 def test_auth_login_rejects_unknown_email(client):

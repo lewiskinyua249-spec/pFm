@@ -1,6 +1,7 @@
 
 from datetime import datetime
 
+from sqlalchemy import true
 from werkzeug.security import (
     generate_password_hash,
     check_password_hash
@@ -32,6 +33,35 @@ class User(UserMixin, db.Model):
         unique=True,
         nullable=False,
         index=True
+    )
+
+    email_verified = db.Column(
+        db.Boolean,
+        nullable=False,
+        default=True,
+        server_default=true()
+    )
+
+    email_verification_sent_at = db.Column(
+        db.DateTime,
+        nullable=True
+    )
+
+    email_verification_code_hash = db.Column(
+        db.String(64),
+        nullable=True
+    )
+
+    email_verification_code_expires_at = db.Column(
+        db.DateTime,
+        nullable=True
+    )
+
+    email_verification_attempts = db.Column(
+        db.Integer,
+        nullable=False,
+        default=0,
+        server_default="0"
     )
 
     password_hash = db.Column(
